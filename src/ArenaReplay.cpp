@@ -92,10 +92,48 @@ CMSG_ATTACKSTOP*/
 struct PacketRecord { uint32 timestamp; WorldPacket packet; };
 struct MatchRecord { BattlegroundTypeId typeId; uint8 arenaTypeId; uint32 mapId; std::deque<PacketRecord> packets; };
 struct BgPlayersGuids { std::string alliancePlayerGuids; std::string hordePlayerGuids; };
+struct TeamRecorders { ObjectGuid alliance; ObjectGuid horde; };
 std::unordered_map<uint32, MatchRecord> records;
 std::unordered_map<uint64, MatchRecord> loadedReplays;
 std::unordered_map<uint32, uint32> bgReplayIds;
 std::unordered_map<uint32, BgPlayersGuids> bgPlayersGuids;
+std::unordered_map<uint32, TeamRecorders> bgRecorders;
+
+namespace
+{
+    static bool IsGuidInBgPlayers(Battleground* bg, ObjectGuid guid)
+    {
+        if (!bg || !guid)
+            return false;
+
+        for (auto const& it : bg->GetPlayers())
+            if (it.second && it.second->GetGUID() == guid)
+                return true;
+
+        return false;
+    }
+
+    static ObjectGuid GetOrAssignRecorderGuid(Battleground* bg, Player* player)
+    {
+        if (!bg || !player)
+            return ObjectGuid();
+
+        auto& rec = bgRecorders[bg->GetInstanceID()];
+        TeamId team = player->GetBgTeamId();
+
+        ObjectGuid& slot = (team == TEAM_ALLIANCE) ? rec.alliance : rec.horde;
+
+        // If no recorder yet, assign deterministically (first player we see for that team).
+        if (!slot)
+            slot = player->GetGUID();
+
+        // If recorder left, re-assign to current player (keeps capture alive even if someone disconnects).
+        if (slot && !IsGuidInBgPlayers(bg, slot))
+            slot = player->GetGUID();
+
+        return slot;
+    }
+}
 
 class ArenaReplayServerScript : public ServerScript
 {
@@ -124,18 +162,12 @@ public:
         if (bg->GetStatus() != BattlegroundStatus::STATUS_IN_PROGRESS)
             return true;
 
-        // record packets from 1 player of each team
-        // iterate just in case a player leaves and used as reference
-        for (auto it : bg->GetPlayers())
-        {
-            if (it.second->GetBgTeamId() == session->GetPlayer()->GetBgTeamId())
-            {
-                if (it.second->GetGUID() != session->GetPlayer()->GetGUID())
-                    return true;
-                else
-                    break;
-            }
-        }
+        // Deterministic recorder selection:
+        // Choose exactly one "recorder" per team per BG instance and keep it stable.
+        // If the recorder leaves, we re-assign to the next player we observe from that team.
+        ObjectGuid recorder = GetOrAssignRecorderGuid(bg, session->GetPlayer());
+        if (recorder && session->GetPlayer()->GetGUID() != recorder)
+            return true;
 
         // ignore packets not in watch list
         if (std::find(watchList.begin(), watchList.end(), packet.GetOpcode()) == watchList.end())
@@ -241,6 +273,10 @@ public:
         if (player->IsSpectator())
             return;
 
+        // Ensure recorder slots are assigned deterministically as players join.
+        // (Recording still starts only once the arena is in progress.)
+        GetOrAssignRecorderGuid(bg, player);
+
         if (!bg->isArena() && !sConfigMgr->GetOption<bool>("ArenaReplay.SaveBattlegrounds", true))
             return;
 
@@ -295,6 +331,7 @@ public:
 
         bgReplayIds.erase(bg->GetInstanceID());
         bgPlayersGuids.erase(bg->GetInstanceID());
+        bgRecorders.erase(bg->GetInstanceID());
     }
 
     void saveReplay(Battleground* bg, TeamId winnerTeamId)
