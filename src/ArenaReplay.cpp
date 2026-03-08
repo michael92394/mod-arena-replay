@@ -12,6 +12,8 @@
 #include "Config.h"
 #include "Opcodes.h"
 #include "Player.h"
+#include "PlayerGossip.h"
+#include "PlayerGossipMgr.h"
 #include "ScriptedGossip.h"
 #include "ScriptMgr.h"
 #include <iomanip>
@@ -567,7 +569,7 @@ public:
 
 
         AddGossipItemFor(player, GOSSIP_ICON_BATTLE, "Replay most watched games of all time", GOSSIP_SENDER_MAIN, REPLAY_MOST_WATCHED_ALLTIME);  // To Do: show arena type + watchedTimes, maybe hide team name
-        SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
+        SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature ? creature->GetGUID() : player->GetGUID());
 
         return true;
     }
@@ -959,7 +961,7 @@ private:
         }
 
         AddGossipItemFor(player, GOSSIP_ICON_TAXI, "Back", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
-        SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
+        SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature ? creature->GetGUID() : player->GetGUID());
     }
 
     std::vector<ReplayInfo> loadMostWatchedReplays()
@@ -1023,7 +1025,7 @@ private:
             }
         }
         AddGossipItemFor(player, GOSSIP_ICON_TAXI, "Back", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
-        SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
+        SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature ? creature->GetGUID() : player->GetGUID());
     }
 
     void FavoriteMatchId(uint64 playerGuid, uint32 code)
@@ -1195,6 +1197,54 @@ private:
     }
 };
 
+
+
+class PlayerGossip_ArenaReplayService final : public PlayerGossip
+{
+public:
+    enum Senders
+    {
+        ROOT = 100
+    };
+
+    PlayerGossip_ArenaReplayService() : PlayerGossip(91012)
+    {
+        RegisterAction(ROOT, OpenRoot);
+        RegisterAction(GOSSIP_SENDER_MAIN, DispatchSelect);
+        RegisterExtendedAction(GOSSIP_SENDER_MAIN, DispatchSelectCode);
+    }
+
+    static void OpenRoot(Player* player, int32, int32, std::any)
+    {
+        ReplayGossip script;
+        script.OnGossipHello(player, nullptr);
+    }
+
+    static void DispatchSelect(Player* player, int32 sender, int32 action, std::any)
+    {
+        ReplayGossip script;
+        script.OnGossipSelect(player, nullptr, uint32(sender), uint32(action));
+    }
+
+    static void DispatchSelectCode(Player* player, int32 sender, int32 action, std::string code, std::any)
+    {
+        ReplayGossip script;
+        script.OnGossipSelectCode(player, nullptr, uint32(sender), uint32(action), code.c_str());
+    }
+};
+
+namespace RTG::Services::ArenaReplay
+{
+    bool Open(Player* player)
+    {
+        if (!player)
+            return false;
+
+        sPlayerGossipMgr->ShowGossipMenu(player, 91012, PlayerGossip_ArenaReplayService::ROOT, 0);
+        return true;
+    }
+}
+
 void AddArenaReplayScripts()
 {
     new ConfigLoaderArenaReplay();
@@ -1202,4 +1252,5 @@ void AddArenaReplayScripts()
     new ArenaReplayBGScript();
     new ArenaReplayArenaScript();
     new ReplayGossip();
+    new PlayerGossip_ArenaReplayService();
 }
