@@ -38,23 +38,57 @@
 #        Default:     0 - Disabled
 #                     1 - Enabled
 #
-
 #    ArenaReplay.BlockWatchingOwnReplay
-#        Description: Prevent players from opening replays they personally participated in.
-#                     This avoids the classic self-watch camera/entity desync problem until
-#                     the module is rewritten to spawn cloned replay actors.
-#        Default:     1 - Block self-replay
+#        Description: Prevent players from opening replays they personally participated in
+#                     when no actor-track camera data exists.
+#        Default:     1 - Block unsafe self-replay
 #                     0 - Allow self-replay anyway
 #
 #    ArenaReplay.SpectatorOnly.LockMovement
-#        Description: Locks client movement during replay playback so the viewer behaves like
-#                     a fixed spectator instead of running around as their real character.
+#        Description: Locks client movement during replay playback.
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
 #    ArenaReplay.SpectatorOnly.AnchorViewer
-#        Description: Periodically snaps the replay viewer back to the initial spectator spot if
-#                     the client drifts. Useful as a fallback for camera stability.
+#        Description: Fallback safety anchor when actor-track follow data is unavailable.
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#    ArenaReplay.ActorSpectate.Enable
+#        Description: Record actor tracks during live arena matches and use them to drive
+#                     spectator follow-camera playback.
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#    ArenaReplay.ActorSpectate.SampleMs
+#        Description: Capture interval in milliseconds for replay actor tracks.
+#        Default:     250
+#
+#    ArenaReplay.ActorSpectate.TeleportMs
+#        Description: How often the spectator camera repositions during actor follow playback.
+#        Default:     200
+#
+#    ArenaReplay.ActorSpectate.AutoCycleMs
+#        Description: How often spectator view cycles to a different recorded actor.
+#                     0 disables auto cycling.
+#        Default:     7000
+#
+#    ArenaReplay.ActorSpectate.FollowDistance
+#        Description: Distance behind the recorded actor for the spectator camera.
+#        Default:     8.0
+#
+#    ArenaReplay.ActorSpectate.FollowHeight
+#        Description: Height offset above the recorded actor for the spectator camera.
+#        Default:     3.0
+#
+#    ArenaReplay.ActorSpectate.StartOnWinnerTeam
+#        Description: Start actor-follow playback on the winner side by default.
+#        Default:     1 - Enabled
+#                     0 - Start on loser side
+#
+#    ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant
+#        Description: If the viewer participated in the replay and their actor track exists,
+#                     start by following their own recorded track first.
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
@@ -67,72 +101,17 @@ ArenaReplay.SaveBattlegrounds = 0
 ArenaReplay.BlockWatchingOwnReplay = 1
 ArenaReplay.SpectatorOnly.LockMovement = 1
 ArenaReplay.SpectatorOnly.AnchorViewer = 1
+ArenaReplay.ActorSpectate.Enable = 1
+ArenaReplay.ActorSpectate.SampleMs = 250
+ArenaReplay.ActorSpectate.TeleportMs = 200
+ArenaReplay.ActorSpectate.AutoCycleMs = 7000
+ArenaReplay.ActorSpectate.FollowDistance = 8.0
+ArenaReplay.ActorSpectate.FollowHeight = 3.0
+ArenaReplay.ActorSpectate.StartOnWinnerTeam = 1
+ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant = 1
 
 ArenaReplay.1v1.Enable = 0
 ArenaReplay.1v1.ArenaType = 1
 
 ArenaReplay.3v3soloQ.Enable = 0
 ArenaReplay.3v3soloQ.ArenaType = 4
-
-#
-#    ArenaReplay.CameraPOV.Enable
-#        Description: Records lightweight POV camera tracks from the selected team recorders and replays
-#                     them during spectate mode. This gives a more modern spectator experience than
-#                     leaving the viewer frozen at the spawn point.
-#        Default:     1 - Enabled
-#                     0 - Disabled
-#
-#    ArenaReplay.CameraPOV.SampleMs
-#        Description: Sampling interval in milliseconds for stored POV camera keyframes.
-#        Default:     250
-#
-#    ArenaReplay.CameraPOV.SwitchMs
-#        Description: When both winner and loser POV tracks exist, auto-switch between them every X ms.
-#        Default:     8000
-#
-#    ArenaReplay.CameraPOV.StartOnWinnerTrack
-#        Description: Start replay POV on the winner recorder track before auto-cycling.
-#        Default:     1 - Start on winner POV
-#                     0 - Start on loser POV
-#
-ArenaReplay.CameraPOV.Enable = 1
-ArenaReplay.CameraPOV.SampleMs = 250
-ArenaReplay.CameraPOV.SwitchMs = 8000
-ArenaReplay.CameraPOV.StartOnWinnerTrack = 1
-
-#
-#    ArenaReplay.ActorSpectate.Enable
-#        Description: Enables replay actor spectating. Instead of leaving the viewer fixed at spawn,
-#                     the camera follows recorded combatant tracks and auto-cycles through targets.
-#                     This is the safest path for self-watch and the closest step toward clone-target replay mode.
-#        Default:     1 - Enabled
-#                     0 - Disabled
-#
-#    ArenaReplay.ActorSpectate.AutoCycleMs
-#        Description: Auto-cycle interval between recorded targets during replay playback.
-#        Default:     7000
-#
-#    ArenaReplay.ActorSpectate.FollowDistance
-#        Description: Distance behind the recorded target used for the follow camera.
-#        Default:     8.0
-#
-#    ArenaReplay.ActorSpectate.FollowHeight
-#        Description: Height offset above the recorded target used for the follow camera.
-#        Default:     3.0
-#
-#    ArenaReplay.ActorSpectate.StartOnWinnerTeam
-#        Description: Start target cycling on the winner team before alternating.
-#        Default:     1 - Winner team
-#                     0 - Loser team
-#
-#    ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant
-#        Description: When watching your own replay, start on your own recorded actor track if present.
-#        Default:     1 - Enabled
-#                     0 - Disabled
-#
-ArenaReplay.ActorSpectate.Enable = 1
-ArenaReplay.ActorSpectate.AutoCycleMs = 7000
-ArenaReplay.ActorSpectate.FollowDistance = 8.0
-ArenaReplay.ActorSpectate.FollowHeight = 3.0
-ArenaReplay.ActorSpectate.StartOnWinnerTeam = 1
-ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant = 1
