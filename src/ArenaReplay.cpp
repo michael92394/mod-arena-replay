@@ -1660,7 +1660,7 @@ public:
         PLAYERHOOK_ON_LOGOUT
     }) {}
 
-    void OnLogout(Player* player) override
+    void OnPlayerLogout(Player* player) override
     {
         ReleaseReplayViewerControl(player);
         loadedReplays.erase(player->GetGUID().GetCounter());
