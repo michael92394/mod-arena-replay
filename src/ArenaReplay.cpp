@@ -135,12 +135,10 @@ struct ActiveReplaySession
     Position anchorPosition;
     uint32 nextAnchorEnforceMs = 0;
     bool movementLocked = false;
-    bool viewerHidden = false;
     bool viewerWasParticipant = false;
     bool actorSpectateActive = false;
     bool actorSpectateOnWinnerTeam = true;
     uint32 actorTrackIndex = 0;
-    uint32 nextActorCycleMs = 0;
     uint32 nextActorTeleportMs = 0;
 };
 struct LiveActorRecorderState
@@ -424,7 +422,6 @@ namespace
         if (!replayer)
             return;
         session.actorSpectateActive = false;
-        session.nextActorCycleMs = 0;
         session.nextActorTeleportMs = 0;
     }
 
@@ -433,78 +430,43 @@ namespace
         if (!replayer || !sConfigMgr->GetOption<bool>("ArenaReplay.ActorSpectate.Enable", true))
             return false;
 
-        auto const* preferred = SelectTracks(match, session.actorSpectateOnWinnerTeam);
-        auto const* alternate = SelectTracks(match, !session.actorSpectateOnWinnerTeam);
-        if (preferred->empty() && alternate->empty())
+        auto const* tracks = SelectTracks(match, session.actorSpectateOnWinnerTeam);
+        if ((!tracks || tracks->empty()) && !SelectTracks(match, !session.actorSpectateOnWinnerTeam)->empty())
+        {
+            session.actorSpectateOnWinnerTeam = !session.actorSpectateOnWinnerTeam;
+            tracks = SelectTracks(match, session.actorSpectateOnWinnerTeam);
+        }
+
+        if (!tracks || tracks->empty())
         {
             ResetActorReplayView(replayer, session);
             return false;
         }
 
-        if (preferred->empty() && !alternate->empty())
-        {
-            session.actorSpectateOnWinnerTeam = !session.actorSpectateOnWinnerTeam;
-            preferred = alternate;
-        }
-
-        if (preferred->empty())
-            return false;
-
-        if (session.actorTrackIndex >= preferred->size())
+        if (session.actorTrackIndex >= tracks->size())
             session.actorTrackIndex = 0;
 
-        uint32 cycleMs = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorSpectate.AutoCycleMs", 7000);
-        if (session.nextActorCycleMs == 0)
-            session.nextActorCycleMs = nowMs + cycleMs;
-
-        if (cycleMs > 0 && session.nextActorCycleMs <= nowMs)
-        {
-            session.nextActorCycleMs = nowMs + cycleMs;
-            if (!preferred->empty())
-                session.actorTrackIndex = (session.actorTrackIndex + 1) % preferred->size();
-            if (!SelectTracks(match, !session.actorSpectateOnWinnerTeam)->empty())
-                session.actorSpectateOnWinnerTeam = !session.actorSpectateOnWinnerTeam;
-            preferred = SelectTracks(match, session.actorSpectateOnWinnerTeam);
-            if (session.actorTrackIndex >= preferred->size())
-                session.actorTrackIndex = 0;
-        }
-
-        ActorTrack const& track = (*preferred)[session.actorTrackIndex];
+        ActorTrack const& track = (*tracks)[session.actorTrackIndex];
         if (track.frames.empty())
             return false;
 
         if (session.nextActorTeleportMs > nowMs)
             return true;
+
         session.nextActorTeleportMs = nowMs + sConfigMgr->GetOption<uint32>("ArenaReplay.ActorSpectate.TeleportMs", 200);
 
         ActorFrame const* frame = &track.frames.front();
         for (ActorFrame const& candidate : track.frames)
         {
-            frame = &candidate;
-            if (candidate.timestamp >= nowMs)
+            if (candidate.timestamp > nowMs)
                 break;
+            frame = &candidate;
         }
 
-        // Camera-style follow: keep the viewer effectively on the actor's position and angle
-        // instead of trailing behind as a visible goblin spectator.
-        float camX = frame->x;
-        float camY = frame->y;
-        float camZ = frame->z + 0.15f;
-        replayer->NearTeleportTo(camX, camY, camZ, frame->o);
+        constexpr float kReplayEyeLift = 0.05f;
+        replayer->NearTeleportTo(frame->x, frame->y, frame->z + kReplayEyeLift, frame->o);
         session.actorSpectateActive = true;
         return true;
-    }
-
-    static void TeleportReplayViewerToAnchor(Player* player, ActiveReplaySession const& session)
-    {
-        if (!player || session.anchorMapId == 0)
-            return;
-
-        player->TeleportTo(session.anchorMapId,
-            session.anchorPosition.GetPositionX(),
-            session.anchorPosition.GetPositionY(),
-            session.anchorPosition.GetPositionZ(),
-            session.anchorPosition.GetOrientation());
     }
 
     static void ReleaseReplayViewerControl(Player* player)
@@ -518,35 +480,13 @@ namespace
             if (it->second.movementLocked)
                 player->SetClientControl(player, true);
 
-            if (it->second.viewerHidden)
-                player->SetVisible(true);
+            player->SetVisible(true);
         }
 
         activeReplaySessions.erase(player->GetGUID().GetCounter());
     }
 
-    static void RestoreReplayViewerToAnchor(Player* player, Battleground* bg)
-    {
-        if (!player)
-            return;
-
-        auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
-        if (it == activeReplaySessions.end())
-        {
-            ReleaseReplayViewerControl(player);
-            return;
-        }
-
-        ActiveReplaySession sessionCopy = it->second;
-        ReleaseReplayViewerControl(player);
-
-        if (bg)
-            player->LeaveBattleground(bg);
-
-        TeleportReplayViewerToAnchor(player, sessionCopy);
-    }
-
-    static void LockReplayViewerControl(Player* player, uint32 replayId)
+    static void LockReplayViewerControl(Player* player, uint32 replayId, uint32 anchorMapId, Position const& anchorPosition)
     {
         if (!player)
             return;
@@ -554,12 +494,11 @@ namespace
         ActiveReplaySession& session = activeReplaySessions[player->GetGUID().GetCounter()];
         session.battlegroundInstanceId = player->GetBattlegroundId();
         session.replayId = replayId;
-        session.anchorMapId = player->GetMapId();
-        session.anchorPosition.Relocate(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
+        session.anchorMapId = anchorMapId;
+        session.anchorPosition.Relocate(anchorPosition.GetPositionX(), anchorPosition.GetPositionY(), anchorPosition.GetPositionZ(), anchorPosition.GetOrientation());
         session.nextAnchorEnforceMs = 0;
 
         player->SetVisible(false);
-        session.viewerHidden = true;
 
         if (sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorOnly.LockMovement", true))
         {
@@ -685,7 +624,8 @@ public:
             if (!bg->GetPlayers().empty())
             {
                 Player* replayer = bg->GetPlayers().begin()->second;
-                RestoreReplayViewerToAnchor(replayer, bg);
+                ReleaseReplayViewerControl(replayer);
+                replayer->LeaveBattleground(bg);
             }
 
             loadedReplays.erase(it);
@@ -777,7 +717,7 @@ public:
         }
 
         if (isReplay && !bg->GetPlayers().empty())
-            RestoreReplayViewerToAnchor(bg->GetPlayers().begin()->second, bg);
+            ReleaseReplayViewerControl(bg->GetPlayers().begin()->second);
 
         bgReplayIds.erase(bg->GetInstanceID());
         bgPlayersGuids.erase(bg->GetInstanceID());
@@ -1558,6 +1498,10 @@ private:
             return false;
         }
 
+        uint32 anchorMapId = player->GetMapId();
+        Position anchorPosition;
+        anchorPosition.Relocate(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
+
         bgReplayIds[bg->GetInstanceID()] = player->GetGUID().GetCounter();
         player->SetPendingSpectatorForBG(bg->GetInstanceID());
         bg->StartBattleground();
@@ -1573,17 +1517,14 @@ private:
         // which can cascade into bad teleports/homebinds. Keep the player on their real faction team
         // while still marking them as spectator via SetPendingSpectatorForBG().
         player->SetBattlegroundId(bg->GetInstanceID(), bgTypeId, queueSlot, true, false, teamId);
-        // Do not overwrite the viewer's original world position with a battleground entry/homebind fallback.
-        // Replay return is handled explicitly through the anchor position captured in LockReplayViewerControl().
         sBattlegroundMgr->SendToBattleground(player, bg->GetInstanceID(), bgTypeId);
         sBattlegroundMgr->BuildBattlegroundStatusPacket(&data, bg, queueSlot, STATUS_IN_PROGRESS, 0, bg->GetStartTime(), bg->GetArenaType(), teamId);
         player->GetSession()->SendPacket(&data);
-        LockReplayViewerControl(player, replayId);
+        LockReplayViewerControl(player, replayId, anchorMapId, anchorPosition);
         ActiveReplaySession& replaySession = activeReplaySessions[player->GetGUID().GetCounter()];
         replaySession.viewerWasParticipant = viewerWasParticipant;
         replaySession.actorSpectateOnWinnerTeam = sConfigMgr->GetOption<bool>("ArenaReplay.ActorSpectate.StartOnWinnerTeam", true);
         replaySession.actorTrackIndex = 0;
-        replaySession.nextActorCycleMs = 0;
         replaySession.nextActorTeleportMs = 0;
 
         if (viewerWasParticipant && sConfigMgr->GetOption<bool>("ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant", true))
@@ -1620,7 +1561,9 @@ private:
         handler.PSendSysMessage("Replay ID {} begins.", replayId);
 
         if (sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorOnly.LockMovement", true))
-            handler.PSendSysMessage("Replay camera mode active: movement is locked and your character is hidden during playback.");
+            handler.PSendSysMessage("Spectator-only mode active: movement is locked during replay playback.");
+
+        handler.PSendSysMessage("Replay POV auto-switch is disabled in this build to keep the camera stable.");
 
         return true;
     }
