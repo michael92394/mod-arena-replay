@@ -174,6 +174,11 @@ namespace
 
         return false;
     }
+	
+	namespace
+	{
+		static void ReleaseReplayViewerControl(Player* player);
+	}
 
     static ObjectGuid GetOrAssignRecorderGuid(Battleground* bg, Player* player)
     {
@@ -470,7 +475,7 @@ namespace
             return;
 
         std::string text = std::string(GetReplayHudPrefix()) + body;
-        player->GetSession()->SendNotification("%s", text.c_str());
+        ChatHandler(player->GetSession()).PSendSysMessage("%s", text.c_str());
     }
 
     static uint32 GetReplayActorTotalCount(MatchRecord const& match)
@@ -1969,22 +1974,22 @@ class ArenaReplayCommandScript : public CommandScript
 public:
     ArenaReplayCommandScript() : CommandScript("ArenaReplayCommandScript") { }
 
-    ChatCommandTable GetCommands() const override
-    {
-        static ChatCommandTable replaySubTable =
-        {
-            { "prev", HandleReplayPrevCommand, SEC_PLAYER, Console::No },
-            { "next", HandleReplayNextCommand, SEC_PLAYER, Console::No },
-            { "open", HandleReplayOpenCommand, SEC_PLAYER, Console::No },
-        };
+    Acore::ChatCommands::ChatCommandTable GetCommands() const override
+	{
+		static Acore::ChatCommands::ChatCommandTable replaySubTable =
+		{
+			{ "prev", HandleReplayPrevCommand, SEC_PLAYER, Acore::ChatCommands::Console::No },
+			{ "next", HandleReplayNextCommand, SEC_PLAYER, Acore::ChatCommands::Console::No },
+			{ "open", HandleReplayOpenCommand, SEC_PLAYER, Acore::ChatCommands::Console::No },
+		};
 
-        static ChatCommandTable commandTable =
-        {
-            { "rtgreplay", replaySubTable }
-        };
+		static Acore::ChatCommands::ChatCommandTable commandTable =
+		{
+			{ "rtgreplay", replaySubTable }
+		};
 
-        return commandTable;
-    }
+		return commandTable;
+	}
 
     static bool HandleReplayPrevCommand(ChatHandler* handler)
     {
