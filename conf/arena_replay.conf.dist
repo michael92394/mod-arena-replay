@@ -98,6 +98,7 @@
 #        Example:     ArenaReplay.BlockWatchingOwnReplay = 1
 #                     Participants cannot directly watch their own replay.
 #
+
 ArenaReplay.Enable = 1
 ArenaReplay.DeleteReplaysAfterDays = 30
 ArenaReplay.DeleteSavedReplays = 0
@@ -135,6 +136,7 @@ ArenaReplay.BlockWatchingOwnReplay = 1
 #        Example:     ArenaReplay.1v1.ArenaType = 1
 #                     Replay logic treats ArenaType 1 as a supported 1v1 match.
 #
+
 ArenaReplay.1v1.Enable = 0
 ArenaReplay.1v1.ArenaType = 1
 
@@ -164,6 +166,7 @@ ArenaReplay.1v1.ArenaType = 1
 #        Example:     ArenaReplay.3v3soloQ.ArenaType = 4
 #                     Replay logic treats ArenaType 4 as Solo Queue 3v3.
 #
+
 ArenaReplay.3v3soloQ.Enable = 0
 ArenaReplay.3v3soloQ.ArenaType = 4
 
@@ -230,6 +233,7 @@ ArenaReplay.3v3soloQ.ArenaType = 4
 #                     A participant begins playback focused on their own actor
 #                     track when possible.
 #
+
 ArenaReplay.ActorSpectate.Enable = 1
 ArenaReplay.ActorSpectate.SampleMs = 250
 ArenaReplay.ActorSpectate.TeleportMs = 100
@@ -265,5 +269,6 @@ ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant = 1
 #        Example:     ArenaReplay.SpectatorOnly.LockMovement = 1
 #                     Replay viewers are movement-locked during playback.
 #
+
 ArenaReplay.SpectatorOnly.AnchorViewer = 1
 ArenaReplay.SpectatorOnly.LockMovement = 1
