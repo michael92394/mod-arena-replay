@@ -9,117 +9,261 @@
 ########################################
 #
 #    ArenaReplay.Enable
-#        Description: Enable module
+#        Description: Enables or disables the ArenaReplay module.
+#                     When enabled, eligible arena and battleground matches are
+#                     recorded to the characters database and can later be
+#                     viewed through the replay NPC/browser workflow.
+#
 #        Default:     1 - Enabled
 #                     0 - Disabled
+#
+#        Example:     ArenaReplay.Enable = 1
+#                     Turns on replay recording and playback features.
 #
 #    ArenaReplay.DeleteReplaysAfterDays
-#        Description: delete replays after specific days
-#        Default:     30 - Enabled
-#                     0 - Disabled, don't delete
+#        Description: Automatically deletes replay records older than the
+#                     configured number of days.
+#
+#                     This cleanup applies to normal replay records and helps
+#                     prevent the replay table from growing without bounds.
+#
+#        Default:     30
+#                     0  - Disabled (never auto-delete old replays)
+#                     >0 - Delete replays older than this many days
+#
+#        Example:     ArenaReplay.DeleteReplaysAfterDays = 14
+#                     Removes non-protected replay records older than 14 days.
 #
 #    ArenaReplay.DeleteSavedReplays
-#        Description: delete saved replays or keep them
-#        Default:     0 - Disabled
-#                     1 - Enabled
+#        Description: Controls whether manually saved/protected replay records
+#                     are also eligible for automatic cleanup.
+#
+#                     Leave this disabled if you want "saved" replays to remain
+#                     available even when normal replay cleanup is active.
+#
+#        Default:     0 - Disabled (saved replays are preserved)
+#                     1 - Enabled  (saved replays may also be deleted)
+#
+#        Example:     ArenaReplay.DeleteSavedReplays = 1
+#                     Cleanup may also remove saved replays once they are old
+#                     enough to match ArenaReplay.DeleteReplaysAfterDays.
 #
 #    ArenaReplay.ValidArenaDuration
-#        Description: Save the replay only if the match lasted >= seconds
-#        Default:     75 - in seconds (60 arena StartDelayTime plus 15 seconds)
-#                     0 - Disabled, save always
+#        Description: Minimum arena match duration, in seconds, required before
+#                     a replay is considered valid and stored.
+#
+#                     This is intended to avoid saving extremely short arena
+#                     rounds, instant leaves, or otherwise low-value replays.
+#
+#        Default:     75
+#                     0  - Disabled (store all qualifying arena matches)
+#                     >0 - Store only arena matches lasting at least this long
+#
+#        Example:     ArenaReplay.ValidArenaDuration = 90
+#                     Only arena matches lasting 90 seconds or longer are saved.
 #
 #    ArenaReplay.SaveUnratedArenas
-#        Description: Save the replay of Skirmish arenas
+#        Description: Enables replay recording for unrated arenas such as
+#                     skirmish-style matches.
+#
 #        Default:     1 - Enabled
 #                     0 - Disabled
+#
+#        Example:     ArenaReplay.SaveUnratedArenas = 1
+#                     Skirmish/unrated arena matches can be recorded.
 #
 #    ArenaReplay.SaveBattlegrounds
-#        Description: Save the replay of battlegrounds
-#        Default:     0 - Disabled
-#                     1 - Enabled
+#        Description: Enables replay recording for battleground matches.
+#
+#                     Battleground replays can generate much larger replay data
+#                     than arena matches, so disable this if you only want arena
+#                     replay support.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.SaveBattlegrounds = 0
+#                     Arena replays remain enabled, battleground replays do not.
 #
 #    ArenaReplay.BlockWatchingOwnReplay
-#        Description: Prevent players from opening replays they personally participated in
-#                     when no actor-track camera data exists.
-#        Default:     1 - Block unsafe self-replay
-#                     0 - Allow self-replay anyway
+#        Description: Prevents a player from opening a replay they personally
+#                     participated in.
 #
-#    ArenaReplay.SpectatorOnly.LockMovement
-#        Description: Locks client movement during replay playback.
+#                     This exists as a safety restriction for playback flows
+#                     where self-view can be unstable or undesirable.
+#
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
-#    ArenaReplay.SpectatorOnly.AnchorViewer
-#        Description: Fallback safety anchor when actor-track follow data is unavailable.
-#        Default:     1 - Enabled
-#                     0 - Disabled
-#
-#    ArenaReplay.ActorSpectate.Enable
-#        Description: Record actor tracks during live arena matches and use them to drive
-#                     spectator follow-camera playback.
-#        Default:     1 - Enabled
-#                     0 - Disabled
-#
-#    ArenaReplay.ActorSpectate.SampleMs
-#        Description: Capture interval in milliseconds for replay actor tracks.
-#        Default:     250
-#
-#    ArenaReplay.ActorSpectate.TeleportMs
-#        Description: How often the spectator camera repositions during actor follow playback.
-#        Default:     200
-#
-#    ArenaReplay.ActorSpectate.AutoCycleMs
-#        Description: How often spectator view cycles to a different recorded actor.
-#                     0 disables auto cycling.
-#        Default:     7000
-#
-#    ArenaReplay.ActorSpectate.FollowDistance
-#        Description: Distance behind the recorded actor for the spectator camera.
-#        Default:     8.0
-#
-#    ArenaReplay.ActorSpectate.FollowHeight
-#        Description: Height offset above the recorded actor for the spectator camera.
-#        Default:     3.0
-#
-#    ArenaReplay.ActorSpectate.StartOnWinnerTeam
-#        Description: Start actor-follow playback on the winner side by default.
-#        Default:     1 - Enabled
-#                     0 - Start on loser side
-#
-#    ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant
-#        Description: If the viewer participated in the replay and their actor track exists,
-#                     start by following their own recorded track first.
-#        Default:     1 - Enabled
-#                     0 - Disabled
-#
-#    ArenaReplay.Debug
-#        Description: Enables additional replay watch diagnostics in the worldserver log.
-#                     This is intended for replay entry, battleground creation, and
-#                     spectator handoff troubleshooting.
-#        Default:     0 - Disabled
-#                     1 - Enabled
+#        Example:     ArenaReplay.BlockWatchingOwnReplay = 1
+#                     Participants cannot directly watch their own replay.
 #
 ArenaReplay.Enable = 1
 ArenaReplay.DeleteReplaysAfterDays = 30
 ArenaReplay.DeleteSavedReplays = 0
 ArenaReplay.ValidArenaDuration = 75
 ArenaReplay.SaveUnratedArenas = 1
-ArenaReplay.SaveBattlegrounds = 0
+ArenaReplay.SaveBattlegrounds = 1
 ArenaReplay.BlockWatchingOwnReplay = 1
-ArenaReplay.SpectatorOnly.LockMovement = 1
-ArenaReplay.SpectatorOnly.AnchorViewer = 1
-ArenaReplay.ActorSpectate.Enable = 1
-ArenaReplay.ActorSpectate.SampleMs = 250
-ArenaReplay.ActorSpectate.TeleportMs = 100
-ArenaReplay.ActorSpectate.AutoCycleMs = 0
-ArenaReplay.ActorSpectate.FollowDistance = 2.5
-ArenaReplay.ActorSpectate.FollowHeight = 1.6
-ArenaReplay.ActorSpectate.StartOnWinnerTeam = 1
-ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant = 1
-ArenaReplay.Debug = 0
 
+########################################
+# ArenaReplay Special Arena Types
+########################################
+#
+#    ArenaReplay.1v1.Enable
+#        Description: Enables replay recording support for a custom 1v1 arena
+#                     ruleset or module.
+#
+#                     This setting only affects replay eligibility checks; your
+#                     custom 1v1 system must already exist and use the matching
+#                     arena type value configured below.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+#        Example:     ArenaReplay.1v1.Enable = 1
+#                     Allows replay recording for custom 1v1 arena matches.
+#
+#    ArenaReplay.1v1.ArenaType
+#        Description: Arena type identifier used by your custom 1v1 system.
+#
+#                     Change this only if your realm's 1v1 module uses a
+#                     different ArenaType value.
+#
+#        Default:     1
+#
+#        Example:     ArenaReplay.1v1.ArenaType = 1
+#                     Replay logic treats ArenaType 1 as a supported 1v1 match.
+#
 ArenaReplay.1v1.Enable = 0
 ArenaReplay.1v1.ArenaType = 1
 
+#
+#    ArenaReplay.3v3soloQ.Enable
+#        Description: Enables replay recording support for a custom Solo Queue
+#                     3v3 arena implementation.
+#
+#                     This setting is intended for realms running a dedicated
+#                     solo-queue module with its own ArenaType identifier.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+#        Example:     ArenaReplay.3v3soloQ.Enable = 1
+#                     Allows replay recording for supported Solo Queue 3v3
+#                     matches.
+#
+#    ArenaReplay.3v3soloQ.ArenaType
+#        Description: Arena type identifier used by the Solo Queue 3v3 system.
+#
+#                     Change this only if your solo-queue implementation uses a
+#                     different ArenaType value.
+#
+#        Default:     4
+#
+#        Example:     ArenaReplay.3v3soloQ.ArenaType = 4
+#                     Replay logic treats ArenaType 4 as Solo Queue 3v3.
+#
 ArenaReplay.3v3soloQ.Enable = 0
 ArenaReplay.3v3soloQ.ArenaType = 4
+
+########################################
+# ArenaReplay Actor Spectate
+########################################
+#
+#    ArenaReplay.ActorSpectate.Enable
+#        Description: Enables actor-track recording and actor-based replay
+#                     spectating.
+#
+#                     When enabled, the module records per-actor follow data and
+#                     uses it during playback to drive the spectator viewer.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorSpectate.Enable = 1
+#                     Replay playback uses actor track camera support.
+#
+#    ArenaReplay.ActorSpectate.SampleMs
+#        Description: Interval, in milliseconds, used when sampling actor-track
+#                     positions during live match recording.
+#
+#                     Lower values create denser replay movement data but can
+#                     increase replay size and recording overhead.
+#
+#        Default:     250
+#
+#        Example:     ArenaReplay.ActorSpectate.SampleMs = 200
+#                     Samples actor positions every 200 ms.
+#
+#    ArenaReplay.ActorSpectate.TeleportMs
+#        Description: Interval, in milliseconds, used when repositioning the
+#                     spectator during actor-follow playback.
+#
+#                     Lower values can make follow behavior feel smoother, but
+#                     overly aggressive values may produce extra movement churn.
+#
+#        Default:     100
+#
+#        Example:     ArenaReplay.ActorSpectate.TeleportMs = 150
+#                     Updates spectator follow position every 150 ms.
+#
+#    ArenaReplay.ActorSpectate.StartOnWinnerTeam
+#        Description: Determines the initial side chosen when actor spectate
+#                     playback begins.
+#
+#        Default:     1 - Start on the winner team
+#                     0 - Start on the loser team
+#
+#        Example:     ArenaReplay.ActorSpectate.StartOnWinnerTeam = 0
+#                     Begin playback from the losing team's perspective.
+#
+#    ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant
+#        Description: If the viewer participated in the replay and their actor
+#                     track exists, start playback on their own recorded actor
+#                     instead of using the normal first-team selection.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant = 1
+#                     A participant begins playback focused on their own actor
+#                     track when possible.
+#
+ArenaReplay.ActorSpectate.Enable = 1
+ArenaReplay.ActorSpectate.SampleMs = 250
+ArenaReplay.ActorSpectate.TeleportMs = 100
+ArenaReplay.ActorSpectate.StartOnWinnerTeam = 1
+ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant = 1
+
+########################################
+# ArenaReplay Spectator Restrictions
+########################################
+#
+#    ArenaReplay.SpectatorOnly.AnchorViewer
+#        Description: Enables the replay spectator anchor safeguard.
+#
+#                     When enabled, the module can periodically re-anchor the
+#                     replay viewer during spectator playback when needed.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.SpectatorOnly.AnchorViewer = 1
+#                     Keeps the replay viewer anchored under spectator control.
+#
+#    ArenaReplay.SpectatorOnly.LockMovement
+#        Description: Prevents replay viewers from moving during spectator-only
+#                     replay playback.
+#
+#                     This helps preserve controlled replay viewing behavior and
+#                     reduces the chance of the viewer interfering with playback.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.SpectatorOnly.LockMovement = 1
+#                     Replay viewers are movement-locked during playback.
+#
+ArenaReplay.SpectatorOnly.AnchorViewer = 1
+ArenaReplay.SpectatorOnly.LockMovement = 1
