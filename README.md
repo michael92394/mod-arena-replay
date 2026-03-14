@@ -50,33 +50,21 @@ This branch adds a new **Replay Actor Spectate** layer. It does not yet spawn fu
 This is **clone-target spectating scaffolding**, not the final cloned-actor / GUID-remap engine. The camera now follows recorded participant tracks instead of relying only on winner/loser POV anchor tracks, but it still does not spawn fully remapped duplicate units yet.
 
 
-## RTG modernization pass: replay library / Apex-style history
+## RTG modernization notes (viewer isolation / camera stability pass)
 
-This update pushes the module closer to a persistent replay library instead of a one-off replay launcher.
+This pass hardens replay playback toward the intended **true spectator** model.
 
-### Added
-- **My recent matches** browser entry so players can reopen their own recent replay-eligible games without remembering IDs.
-- **Recently watched** browser entry backed by a dedicated characters DB table.
-- Automatic **watch history upsert** every time a replay is opened.
-- `INSERT IGNORE` protection for saved favorites so duplicate saves do not spam errors.
-- Configurable browser list sizing and history retention.
-- Cleanup for orphaned recently watched rows when old replay rows are removed.
+### What changed
+- Replay viewers now enter playback as **TEAM_NEUTRAL** spectators instead of seeding a replay arena team roster.
+- Replay camera movement is stabilized with explicit spectator movement-state handling during playback.
+- Actor follow now uses interpolated actor frames instead of only the last sampled frame.
+- Replay fallback anchoring now uses a replay-space anchor instead of the player's original world-map anchor.
+- Replay HUD/chat output now uses AzerothCore-safe formatting, fixing literal `%s` output.
+- Replay exit flow now preserves the saved anchor session long enough to return the viewer correctly.
 
-### New characters DB file
-- `data/sql/db-characters/replayarena_recently_watched.sql`
-
-### New/updated config keys
-- `ArenaReplay.Library.BrowseLimit`
-- `ArenaReplay.Library.RecentMatchesDays`
-- `ArenaReplay.Library.RecentlyWatched.Enable`
-- `ArenaReplay.Library.RecentlyWatched.RetentionDays`
-
-### Practical result
-Players now get a more modern replay flow:
-- play match
-- replay gets recorded
-- reopen it from **My recent matches**
-- rewatch it later from **Recently watched**
-- optionally keep it forever in **My favorite matches**
-
-That gives you a much better foundation for the “Apex replay” feel where a replay can stay part of a player’s personal library instead of being a temporary curiosity.
+### Intent
+These changes are aimed at the current modernization direction:
+- viewer is not a combatant
+- actor tracks remain the only replay combatant source
+- camera behavior is more stable and readable
+- replay sessions can be reopened repeatedly without spectator-state pollution
