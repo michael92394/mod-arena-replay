@@ -49,8 +49,7 @@ This branch adds a new **Replay Actor Spectate** layer. It does not yet spawn fu
 ### Important limitation
 This is **clone-target spectating scaffolding**, not the final cloned-actor / GUID-remap engine. The camera now follows recorded participant tracks instead of relying only on winner/loser POV anchor tracks, but it still does not spawn fully remapped duplicate units yet.
 
-### RTG replay HUD/runtime hardening
-- Replay HUD messages are now gated to active replay sessions only.
-- Opening the replay service outside playback clears any stale replay HUD state.
-- Replay step commands now refuse stale/non-replay contexts and clear lingering replay HUD state instead of mutating UI outside replay.
-- Replay exit now performs a second post-return movement cleanup pass to reduce stuck levitation/hover/fly state.
+
+## RTG modernization note 5.2.4
+
+Replay viewers now keep their real faction team for battleground transport/exit bookkeeping while remaining spectator-only through the replay control path. This avoids neutral-team arena exit failures that can cascade into `Map 0 could not be created` and repeated homebind churn on some maps. Replay HUD messages are also now gated to active replay sessions and explicitly ended when the replay service opens or the player logs out.

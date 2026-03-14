@@ -165,35 +165,6 @@ std::unordered_map<uint64, ActiveReplaySession> activeReplaySessions;
 
 namespace
 {
-    static bool IsReplayBattleground(Battleground const* bg)
-    {
-        return bg && bgReplayIds.find(bg->GetInstanceID()) != bgReplayIds.end();
-    }
-
-    static bool IsPlayerWatchingActiveReplay(Player* player)
-    {
-        if (!player)
-            return false;
-
-        Battleground* bg = player->GetBattleground();
-        if (!IsReplayBattleground(bg))
-            return false;
-
-        uint64 viewerGuid = player->GetGUID().GetCounter();
-        return activeReplaySessions.find(viewerGuid) != activeReplaySessions.end() &&
-               loadedReplays.find(viewerGuid) != loadedReplays.end();
-    }
-
-    static void ClearReplayMovementStabilization(Player* player)
-    {
-        if (!player)
-            return;
-
-        player->SetCanFly(false);
-        player->SetDisableGravity(false);
-        player->SetHover(false);
-    }
-
     static bool IsGuidInBgPlayers(Battleground* bg, ObjectGuid guid)
     {
         if (!bg || !guid)
@@ -500,8 +471,12 @@ namespace
         if (!player || !player->GetSession())
             return;
 
-        if (body != "END" && !IsPlayerWatchingActiveReplay(player))
-            return;
+        if (body != "END")
+        {
+            auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
+            if (it == activeReplaySessions.end())
+                return;
+        }
 
         std::string text = std::string(GetReplayHudPrefix()) + body;
         ChatHandler(player->GetSession()).SendSysMessage(text.c_str());
@@ -721,14 +696,12 @@ namespace
         if (session.movementLocked)
             player->SetClientControl(player, true);
 
-        if (session.replayMovementStabilized)
-            ClearReplayMovementStabilization(player);
+        player->SetCanFly(false);
+        player->SetDisableGravity(false);
+        player->SetHover(false);
 
         if (session.viewerHidden)
-        {
             player->SetVisible(true);
-            player->SetGMVisible(true);
-        }
     }
 
 	static void ReleaseReplayViewerControl(Player* player)
@@ -741,12 +714,12 @@ namespace
             RestoreReplayViewerState(player, it->second);
         else
         {
-            ClearReplayMovementStabilization(player);
+            player->SetCanFly(false);
+            player->SetDisableGravity(false);
+            player->SetHover(false);
             player->SetVisible(true);
-            player->SetGMVisible(true);
         }
 
-        SendReplayHudEnd(player);
         activeReplaySessions.erase(player->GetGUID().GetCounter());
     }
 
@@ -774,7 +747,6 @@ namespace
 
         ReturnReplayViewerToAnchor(player, session);
         RestoreReplayViewerState(player, session);
-        SendReplayHudEnd(player);
         activeReplaySessions.erase(player->GetGUID().GetCounter());
         loadedReplays.erase(player->GetGUID().GetCounter());
     }
@@ -858,7 +830,6 @@ namespace
         if (!session.viewerHidden)
         {
             replayer->SetVisible(false);
-            replayer->SetGMVisible(false);
             session.viewerHidden = true;
         }
 
@@ -916,10 +887,7 @@ namespace
             session.movementLocked = true;
         }
 
-        SendReplayHudEnd(player);
-        ClearReplayMovementStabilization(player);
         player->SetVisible(false);
-        player->SetGMVisible(false);
         session.viewerHidden = true;
     }
 }
@@ -2036,14 +2004,14 @@ private:
 
         BattlegroundTypeId bgTypeId = bg->GetBgTypeID();
 
-        TeamId teamId = TEAM_NEUTRAL;
+        TeamId teamId = player->GetTeamId() == TEAM_ALLIANCE ? TEAM_ALLIANCE : TEAM_HORDE;
 
         uint32 queueSlot = 0;
         WorldPacket data;
 
-        // TEAM_NEUTRAL can leave the replay instance without a valid team start location on some maps,
-        // which can cascade into bad teleports/homebinds. Keep the player on their real faction team
-        // while still marking them as spectator via SetPendingSpectatorForBG().
+        // Keep the replay viewer on their real faction team for battleground transport/exit bookkeeping.
+        // Spectator behavior is still driven by SetPendingSpectatorForBG(), while a neutral team here can
+        // fall through invalid start-location handling on some arena maps and trigger Map 0/homebind churn.
         LockReplayViewerControl(player, replayId);
         player->SetBattlegroundId(bg->GetInstanceID(), bgTypeId, queueSlot, true, false, teamId);
         player->SetEntryPoint();
@@ -2176,6 +2144,7 @@ public:
 
     void OnPlayerLogout(Player* player) override
     {
+        SendReplayHudEnd(player);
         ReleaseReplayViewerControl(player);
         loadedReplays.erase(player->GetGUID().GetCounter());
     }
@@ -2266,6 +2235,7 @@ namespace RTG::Services::ArenaReplay
 
         player->PlayerTalkClass->ClearMenus();
         CloseGossipMenuFor(player);
+        SendReplayHudEnd(player);
 
         sPlayerGossipMgr->ShowGossipMenu(player, 91012, PlayerGossip_ArenaReplayService::ROOT, 0);
         return true;
@@ -2310,7 +2280,6 @@ public:
         if (!handler)
             return false;
         Player* player = handler->GetPlayer();
-        SendReplayHudEnd(player);
         return RTG::Services::ArenaReplay::Open(player);
     }
 
@@ -2325,18 +2294,14 @@ public:
 
         auto sessionIt = activeReplaySessions.find(player->GetGUID().GetCounter());
         auto replayIt = loadedReplays.find(player->GetGUID().GetCounter());
-        if (sessionIt == activeReplaySessions.end() || replayIt == loadedReplays.end() || !IsPlayerWatchingActiveReplay(player))
+        if (sessionIt == activeReplaySessions.end() || replayIt == loadedReplays.end())
         {
-            SendReplayHudEnd(player);
-            ReleaseReplayViewerControl(player);
-            loadedReplays.erase(player->GetGUID().GetCounter());
             handler->PSendSysMessage("You are not currently watching a replay.");
             return false;
         }
 
         if (!StepReplayActorSelection(replayIt->second, sessionIt->second, delta))
         {
-            SendReplayHudEnd(player);
             handler->PSendSysMessage("No replay actors are available.");
             return false;
         }
