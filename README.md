@@ -49,13 +49,10 @@ This branch adds a new **Replay Actor Spectate** layer. It does not yet spawn fu
 ### Important limitation
 This is **clone-target spectating scaffolding**, not the final cloned-actor / GUID-remap engine. The camera now follows recorded participant tracks instead of relying only on winner/loser POV anchor tracks, but it still does not spawn fully remapped duplicate units yet.
 
-### Phase 5.2.6 replay stabilization notes
-- replay HUD traffic is now gated to active replay sessions only
-- watcher updates are deduplicated so unchanged `WATCHERS|N` payloads do not spam every tick
-- POV selection now works from a filtered playable actor roster instead of raw track count
-- replay viewer hiding is enforced continuously during active playback and now also overrides the local viewer display model during replay
-- older replay actor tracks are sanitized on load so invalid or non-finite frame data is dropped before POV selection
-- replay playback waits briefly before sending recorded packets to reduce client-load races on older replays
 
-### Current limitation
-This module is still a **hidden spectator-anchor** implementation, not a full spawned-clone replay renderer. The camera follows sanitized recorded actor tracks and suppresses the visible watcher body as aggressively as possible within the existing architecture, but it does not yet spawn fully remapped replay clone units.
+## RTG 5.2.7 replay stabilization notes
+
+- Replay HUD watcher updates are deduplicated instead of re-sent every tick.
+- Replay playback now uses a capped packet budget per battleground update to reduce hitching on older replays.
+- Replay exit prefers the normal battleground return path when available instead of forcing an extra anchor teleport on top of battleground leave.
+- Replay actor selection only treats tracks with valid GUIDs and finite frame data as playable POV targets.
