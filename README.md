@@ -56,3 +56,20 @@ This is **clone-target spectating scaffolding**, not the final cloned-actor / GU
 - Replay playback now uses a capped packet budget per battleground update to reduce hitching on older replays.
 - Replay exit prefers the normal battleground return path when available instead of forcing an extra anchor teleport on top of battleground leave.
 - Replay actor selection only treats tracks with valid GUIDs and finite frame data as playable POV targets.
+
+
+## RTG 5.2.8 arena-only stabilization notes
+
+This packaging is now tuned primarily for **arena-only replay** on RTG. Battleground replay recording is disabled by default in the distributed config.
+
+### Included fixes
+- Added replay HUD gating helper so replay-only HUD messages do not compile-break or leak as easily outside active replay sessions.
+- Added actor-track sanitization during replay load so malformed or non-finite actor frames from older replays are filtered out before POV selection.
+- Tightened playable POV selection to valid actor tracks only.
+- Added immediate camera re-apply for `.rtgreplay next` / `.rtgreplay prev` so manual POV switching forces a new spectator teleport right away.
+- Added a replay-end grace window before teardown to reduce abrupt end-of-replay crashes.
+- Replaced aggressive replay packet bursts with a configurable per-update packet budget via `ArenaReplay.Playback.PacketBudgetPerUpdate`.
+- Simplified replay exit toward a single anchor-return path instead of stacking battleground-leave and manual teleport in the same teardown.
+
+### Current architecture note
+This remains a **hidden spectator-anchor replay system**, not a full cloned-actor renderer. The module is materially more stable for arena-only use, but legacy replay compatibility still depends on the quality of the recorded packet/actor data.

@@ -104,7 +104,7 @@ ArenaReplay.DeleteReplaysAfterDays = 30
 ArenaReplay.DeleteSavedReplays = 0
 ArenaReplay.ValidArenaDuration = 75
 ArenaReplay.SaveUnratedArenas = 1
-ArenaReplay.SaveBattlegrounds = 1
+ArenaReplay.SaveBattlegrounds = 0
 ArenaReplay.BlockWatchingOwnReplay = 1
 
 ########################################
@@ -299,12 +299,29 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     A participant begins playback focused on their own actor
 #                     track when possible.
 #
+#    ArenaReplay.Playback.PacketBudgetPerUpdate
+#        Description: Maximum number of recorded replay packets sent to the
+#                     viewer during a single battleground update tick.
+#
+#                     Lower values reduce burstiness and client hitching during
+#                     playback at the cost of slightly slower catch-up on very
+#                     dense replays. Higher values make playback more aggressive
+#                     but can worsen stutter or replay-end instability on older
+#                     recordings.
+#
+#        Default:     60
+#                     Minimum effective runtime value is 20.
+#
+#        Example:     ArenaReplay.Playback.PacketBudgetPerUpdate = 40
+#                     Uses a gentler playback burst size for smoother viewing.
+#
 
 ArenaReplay.ActorSpectate.Enable = 1
 ArenaReplay.ActorSpectate.SampleMs = 250
 ArenaReplay.ActorSpectate.TeleportMs = 100
 ArenaReplay.ActorSpectate.StartOnWinnerTeam = 1
 ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant = 1
+ArenaReplay.Playback.PacketBudgetPerUpdate = 60
 
 ########################################
 # ArenaReplay Spectator Restrictions

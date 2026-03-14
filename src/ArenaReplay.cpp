@@ -152,6 +152,9 @@ struct ActiveReplaySession
     bool replayMovementStabilized = false;
     bool viewerHidden = false;
     bool teardownInProgress = false;
+    bool replayComplete = false;
+    uint32 replayCompleteAtMs = 0;
+    uint32 packetBudgetPerUpdate = 60;
 };
 struct LiveActorRecorderState
 {
@@ -470,6 +473,29 @@ namespace
         }
     }
 
+    static bool IsReplayHudAllowed(Player* player)
+    {
+        if (!player || !player->GetSession())
+            return false;
+
+        auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
+        if (it == activeReplaySessions.end())
+            return false;
+
+        ActiveReplaySession const& session = it->second;
+        if (session.teardownInProgress)
+            return false;
+
+        Battleground* bg = player->GetBattleground();
+        if (!bg || !bg->isArena())
+            return false;
+
+        if (bgReplayIds.find(bg->GetInstanceID()) == bgReplayIds.end())
+            return false;
+
+        return true;
+    }
+
     static void SendReplayHudMessage(Player* player, std::string const& body)
     {
         if (!player || !player->GetSession())
@@ -503,6 +529,32 @@ namespace
         }
 
         return haveValidFrame;
+    }
+
+    static void SanitizeActorTracks(std::vector<ActorTrack>& tracks)
+    {
+        for (ActorTrack& track : tracks)
+        {
+            std::vector<ActorFrame> sanitized;
+            sanitized.reserve(track.frames.size());
+            for (ActorFrame const& frame : track.frames)
+            {
+                if (!std::isfinite(frame.x) || !std::isfinite(frame.y) || !std::isfinite(frame.z) || !std::isfinite(frame.o))
+                    continue;
+                sanitized.push_back(frame);
+            }
+
+            std::sort(sanitized.begin(), sanitized.end(), [](ActorFrame const& a, ActorFrame const& b)
+            {
+                return a.timestamp < b.timestamp;
+            });
+            track.frames.swap(sanitized);
+        }
+
+        tracks.erase(std::remove_if(tracks.begin(), tracks.end(), [](ActorTrack const& track)
+        {
+            return !IsReplayActorTrackPlayable(track);
+        }), tracks.end());
     }
 
     static std::vector<ReplayActorSelectionRef> BuildPlayableReplayActorSelections(MatchRecord const& match)
@@ -723,8 +775,9 @@ namespace
         player->SetCanFly(false);
         player->SetDisableGravity(false);
         player->SetHover(false);
+        player->SetClientControl(player, true);
 
-        if (session.viewerHidden)
+        if (session.viewerHidden || !player->IsVisible())
             player->SetVisible(true);
     }
 
@@ -756,9 +809,6 @@ namespace
         auto it = activeReplaySessions.find(viewerKey);
         if (it == activeReplaySessions.end())
         {
-            if (bg)
-                player->LeaveBattleground(bg);
-            ReleaseReplayViewerControl(player);
             loadedReplays.erase(viewerKey);
             return;
         }
@@ -769,10 +819,12 @@ namespace
         SendReplayHudEnd(player);
         RestoreReplayViewerState(player, session);
 
-        if (bg && player->GetBattlegroundId() == bg->GetInstanceID())
-            player->LeaveBattleground(bg);
-        else
+        // Prefer a single deterministic world return instead of stacking
+        // battleground leave and an extra manual teleport in the same flow.
+        if (session.anchorMapId != 0)
             ReturnReplayViewerToAnchor(player, session);
+        else if (bg && player->GetBattlegroundId() == bg->GetInstanceID())
+            player->LeaveBattleground(bg);
 
         activeReplaySessions.erase(viewerKey);
     }
@@ -826,12 +878,12 @@ namespace
         return track.frames.back();
     }
 
-    static bool ApplyActorReplayView(Player* replayer, MatchRecord& match, ActiveReplaySession& session, uint32 nowMs)
+    static bool ApplyActorReplayView(Player* replayer, MatchRecord& match, ActiveReplaySession& session, uint32 nowMs, bool forceImmediate = false)
     {
         if (!replayer || !sConfigMgr->GetOption<bool>("ArenaReplay.ActorSpectate.Enable", true) || session.teardownInProgress)
             return false;
 
-        if (session.replayWarmupUntilMs > nowMs)
+        if (!forceImmediate && session.replayWarmupUntilMs > nowMs)
             return false;
 
         uint32 flatIndex = 1;
@@ -862,7 +914,7 @@ namespace
             session.viewerHidden = true;
         }
 
-        if (session.nextActorTeleportMs > nowMs)
+        if (!forceImmediate && session.nextActorTeleportMs > nowMs)
             return true;
         session.nextActorTeleportMs = nowMs + sConfigMgr->GetOption<uint32>("ArenaReplay.ActorSpectate.TeleportMs", 100);
 
@@ -882,7 +934,7 @@ namespace
         float dy = replayer->GetPositionY() - targetY;
         float dz = replayer->GetPositionZ() - targetZ;
         float distSq = dx * dx + dy * dy + dz * dz;
-        if (distSq > 1.0f)
+        if (forceImmediate || distSq > 1.0f)
             replayer->NearTeleportTo(targetX, targetY, targetZ, frame.o);
         else if (std::abs(replayer->GetOrientation() - frame.o) > 0.05f)
             replayer->SetFacingTo(frame.o);
@@ -913,6 +965,9 @@ namespace
         session.replayMovementStabilized = false;
         session.viewerHidden = false;
         session.teardownInProgress = false;
+        session.replayComplete = false;
+        session.replayCompleteAtMs = 0;
+        session.packetBudgetPerUpdate = std::max<uint32>(20u, sConfigMgr->GetOption<uint32>("ArenaReplay.Playback.PacketBudgetPerUpdate", 60));
 
         if (sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorOnly.LockMovement", true))
         {
@@ -1035,25 +1090,23 @@ public:
 
         MatchRecord& match = it->second;
 
-        // if replay ends or spectator left > free arena replay data and/or kick player
-        if (match.packets.empty() || bg->GetPlayers().empty())
+        if (bg->GetPlayers().empty())
         {
-            if (!bg->GetPlayers().empty())
-            {
-                Player* replayer = bg->GetPlayers().begin()->second;
-                ExitReplayAndReturnToAnchor(replayer, bg);
-            }
-
             loadedReplays.erase(it);
             return;
         }
 
         Player* replayer = bg->GetPlayers().begin()->second;
+        auto sessionIt = activeReplaySessions.find(replayer->GetGUID().GetCounter());
+        if (sessionIt == activeReplaySessions.end())
+            return;
+
+        ActiveReplaySession& session = sessionIt->second;
 
         // send replay data to spectator first so actors exist client-side before camera positioning,
         // but cap burst size to avoid hitching and client overload on older replays.
         uint32 packetsSentThisUpdate = 0;
-        uint32 packetBudgetPerUpdate = 200;
+        uint32 packetBudgetPerUpdate = std::max<uint32>(20u, session.packetBudgetPerUpdate);
         while (!match.packets.empty() && match.packets.front().timestamp <= bg->GetStartTime() && packetsSentThisUpdate < packetBudgetPerUpdate)
         {
             WorldPacket* myPacket = &match.packets.front().packet;
@@ -1062,10 +1115,28 @@ public:
             ++packetsSentThisUpdate;
         }
 
-        auto sessionIt = activeReplaySessions.find(replayer->GetGUID().GetCounter());
+        if (match.packets.empty())
+        {
+            if (!session.replayComplete)
+            {
+                session.replayComplete = true;
+                session.replayCompleteAtMs = bg->GetStartTime() + 1500;
+            }
+            else if (bg->GetStartTime() >= session.replayCompleteAtMs)
+            {
+                ExitReplayAndReturnToAnchor(replayer, bg);
+                loadedReplays.erase(it);
+                return;
+            }
+        }
+        else
+        {
+            session.replayComplete = false;
+            session.replayCompleteAtMs = 0;
+        }
+
         if (sessionIt != activeReplaySessions.end())
         {
-            ActiveReplaySession& session = sessionIt->second;
             if (session.replayWarmupUntilMs == 1500)
                 session.replayWarmupUntilMs = bg->GetStartTime() + 1500;
             if (session.teardownInProgress)
@@ -2142,6 +2213,8 @@ private:
         record.loserPlayerGuidList = ParseGuidCsv(fields[8].Get<std::string>());
         record.winnerActorTracks = DeserializeActorTracks(fields[9].Get<std::string>());
         record.loserActorTracks = DeserializeActorTracks(fields[10].Get<std::string>());
+        SanitizeActorTracks(record.winnerActorTracks);
+        SanitizeActorTracks(record.loserActorTracks);
 
         auto decoded = Acore::Encoding::Base32::Decode(fields[4].Get<std::string>());
         if (!decoded || decoded->empty())
@@ -2348,9 +2421,10 @@ public:
 
         Battleground* bg = player->GetBattleground();
         if (bg)
-            ApplyActorReplayView(player, replayIt->second, sessionIt->second, bg->GetStartTime());
+            ApplyActorReplayView(player, replayIt->second, sessionIt->second, bg->GetStartTime(), true);
 
         SendReplayHudPov(player, replayIt->second, sessionIt->second, true);
+        sessionIt->second.nextHudWatcherSyncMs = 0;
         SendReplayHudWatchers(player->GetBattleground(), player, replayIt->second, sessionIt->second, true);
         return true;
     }
