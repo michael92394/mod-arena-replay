@@ -165,6 +165,35 @@ std::unordered_map<uint64, ActiveReplaySession> activeReplaySessions;
 
 namespace
 {
+    static bool IsReplayBattleground(Battleground const* bg)
+    {
+        return bg && bgReplayIds.find(bg->GetInstanceID()) != bgReplayIds.end();
+    }
+
+    static bool IsPlayerWatchingActiveReplay(Player* player)
+    {
+        if (!player)
+            return false;
+
+        Battleground* bg = player->GetBattleground();
+        if (!IsReplayBattleground(bg))
+            return false;
+
+        uint64 viewerGuid = player->GetGUID().GetCounter();
+        return activeReplaySessions.find(viewerGuid) != activeReplaySessions.end() &&
+               loadedReplays.find(viewerGuid) != loadedReplays.end();
+    }
+
+    static void ClearReplayMovementStabilization(Player* player)
+    {
+        if (!player)
+            return;
+
+        player->SetCanFly(false);
+        player->SetDisableGravity(false);
+        player->SetHover(false);
+    }
+
     static bool IsGuidInBgPlayers(Battleground* bg, ObjectGuid guid)
     {
         if (!bg || !guid)
@@ -471,6 +500,9 @@ namespace
         if (!player || !player->GetSession())
             return;
 
+        if (body != "END" && !IsPlayerWatchingActiveReplay(player))
+            return;
+
         std::string text = std::string(GetReplayHudPrefix()) + body;
         ChatHandler(player->GetSession()).SendSysMessage(text.c_str());
     }
@@ -690,14 +722,13 @@ namespace
             player->SetClientControl(player, true);
 
         if (session.replayMovementStabilized)
-        {
-            player->SetCanFly(false);
-            player->SetDisableGravity(false);
-            player->SetHover(false);
-        }
+            ClearReplayMovementStabilization(player);
 
         if (session.viewerHidden)
+        {
             player->SetVisible(true);
+            player->SetGMVisible(true);
+        }
     }
 
 	static void ReleaseReplayViewerControl(Player* player)
@@ -710,12 +741,12 @@ namespace
             RestoreReplayViewerState(player, it->second);
         else
         {
-            player->SetCanFly(false);
-            player->SetDisableGravity(false);
-            player->SetHover(false);
+            ClearReplayMovementStabilization(player);
             player->SetVisible(true);
+            player->SetGMVisible(true);
         }
 
+        SendReplayHudEnd(player);
         activeReplaySessions.erase(player->GetGUID().GetCounter());
     }
 
@@ -742,6 +773,8 @@ namespace
             player->LeaveBattleground(bg);
 
         ReturnReplayViewerToAnchor(player, session);
+        RestoreReplayViewerState(player, session);
+        SendReplayHudEnd(player);
         activeReplaySessions.erase(player->GetGUID().GetCounter());
         loadedReplays.erase(player->GetGUID().GetCounter());
     }
@@ -825,6 +858,7 @@ namespace
         if (!session.viewerHidden)
         {
             replayer->SetVisible(false);
+            replayer->SetGMVisible(false);
             session.viewerHidden = true;
         }
 
@@ -882,7 +916,10 @@ namespace
             session.movementLocked = true;
         }
 
+        SendReplayHudEnd(player);
+        ClearReplayMovementStabilization(player);
         player->SetVisible(false);
+        player->SetGMVisible(false);
         session.viewerHidden = true;
     }
 }
@@ -2273,6 +2310,7 @@ public:
         if (!handler)
             return false;
         Player* player = handler->GetPlayer();
+        SendReplayHudEnd(player);
         return RTG::Services::ArenaReplay::Open(player);
     }
 
@@ -2287,14 +2325,18 @@ public:
 
         auto sessionIt = activeReplaySessions.find(player->GetGUID().GetCounter());
         auto replayIt = loadedReplays.find(player->GetGUID().GetCounter());
-        if (sessionIt == activeReplaySessions.end() || replayIt == loadedReplays.end())
+        if (sessionIt == activeReplaySessions.end() || replayIt == loadedReplays.end() || !IsPlayerWatchingActiveReplay(player))
         {
+            SendReplayHudEnd(player);
+            ReleaseReplayViewerControl(player);
+            loadedReplays.erase(player->GetGUID().GetCounter());
             handler->PSendSysMessage("You are not currently watching a replay.");
             return false;
         }
 
         if (!StepReplayActorSelection(replayIt->second, sessionIt->second, delta))
         {
+            SendReplayHudEnd(player);
             handler->PSendSysMessage("No replay actors are available.");
             return false;
         }

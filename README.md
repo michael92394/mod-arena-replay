@@ -49,5 +49,8 @@ This branch adds a new **Replay Actor Spectate** layer. It does not yet spawn fu
 ### Important limitation
 This is **clone-target spectating scaffolding**, not the final cloned-actor / GUID-remap engine. The camera now follows recorded participant tracks instead of relying only on winner/loser POV anchor tracks, but it still does not spawn fully remapped duplicate units yet.
 
-### RTG Phase 2 hidden spectator anchor
-Replay viewing now hides the real watcher body while playback is active so the replay space is no longer visually polluted by a goblin/player spectator model. This is still a hidden-anchor implementation rather than a full spawned-clone renderer, so the camera remains driven by recorded actor tracks while the viewer entity stays invisible and excluded from replay HUD actor selection.
+### RTG replay HUD/runtime hardening
+- Replay HUD messages are now gated to active replay sessions only.
+- Opening the replay service outside playback clears any stale replay HUD state.
+- Replay step commands now refuse stale/non-replay contexts and clear lingering replay HUD state instead of mutating UI outside replay.
+- Replay exit now performs a second post-return movement cleanup pass to reduce stuck levitation/hover/fly state.
