@@ -355,3 +355,94 @@ ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 
 ArenaReplay.SpectatorOnly.AnchorViewer = 1
 ArenaReplay.SpectatorOnly.LockMovement = 1
+
+########################################
+# ArenaReplay Debug and Diagnostics
+########################################
+#
+#    ArenaReplay.Debug.Enable
+#        Description: Enables structured replay trace logging for runtime
+#                     diagnostics and production hardening.
+#
+#                     When enabled, the module writes phase-based trace lines
+#                     for replay open, HUD gating, actor switching, playback,
+#                     teardown, and return verification.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+#        Example:     ArenaReplay.Debug.Enable = 1
+#                     Turns on replay diagnostic tracing.
+#
+#    ArenaReplay.Debug.Verbose
+#        Description: Expands diagnostic logging with lower-level replay HUD and
+#                     actor-application detail.
+#
+#                     Leave this disabled for normal live testing. Enable it
+#                     only when actively tracing a replay issue.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+#        Example:     ArenaReplay.Debug.Verbose = 1
+#                     Produces deeper replay trace detail.
+#
+#    ArenaReplay.Debug.LogHud
+#        Description: Includes replay HUD gating, POV, and watcher-sync events
+#                     in the replay diagnostic trace.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.Debug.LogHud = 1
+#                     Logs replay HUD allow/deny and state updates.
+#
+#    ArenaReplay.Debug.LogActors
+#        Description: Includes actor-switch and actor-camera application events
+#                     in the replay diagnostic trace.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.Debug.LogActors = 1
+#                     Logs `.rtgreplay next` / `.rtgreplay prev` actor changes.
+#
+#    ArenaReplay.Debug.LogPlayback
+#        Description: Includes once-per-second playback heartbeat lines showing
+#                     replay packet drain, actor application, and completion
+#                     timing.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+#        Example:     ArenaReplay.Debug.LogPlayback = 1
+#                     Logs replay progress and packet-drain cadence.
+#
+#    ArenaReplay.Debug.LogTeardown
+#        Description: Includes replay teardown owner-path logging such as
+#                     packet-stream completion, battleground end, and logout.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.Debug.LogTeardown = 1
+#                     Logs replay exit sequencing and chosen teardown action.
+#
+#    ArenaReplay.Debug.LogReturn
+#        Description: Includes final replay viewer state verification after exit,
+#                     such as map, position, battleground attachment, and flight
+#                     state.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.Debug.LogReturn = 1
+#                     Logs whether the replay viewer safely returned to a sane state.
+#
+ArenaReplay.Debug.Enable = 0
+ArenaReplay.Debug.Verbose = 0
+ArenaReplay.Debug.LogHud = 1
+ArenaReplay.Debug.LogActors = 1
+ArenaReplay.Debug.LogPlayback = 0
+ArenaReplay.Debug.LogTeardown = 1
+ArenaReplay.Debug.LogReturn = 1

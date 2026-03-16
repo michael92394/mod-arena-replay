@@ -1,0 +1,7 @@
+## Interface: 30300
+## Title: RTG Replay HUD
+## Notes: Replay spectator HUD for Return to Glory arena replay system.
+## Author: OpenAI for Michaeldev / Titans-League
+## Version: 1.0.0
+## SavedVariables: RTGReplayHUDDB
+RTG_ReplayHUD.lua

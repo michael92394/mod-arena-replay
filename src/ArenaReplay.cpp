@@ -22,6 +22,7 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -130,7 +131,9 @@ struct BgPlayersGuids { std::string alliancePlayerGuids; std::string hordePlayer
 struct TeamRecorders { ObjectGuid alliance; ObjectGuid horde; };
 struct ActiveReplaySession
 {
+    uint64 traceId = 0;
     uint32 battlegroundInstanceId = 0;
+    uint32 priorBattlegroundInstanceId = 0;
     uint32 replayId = 0;
     uint32 anchorMapId = 0;
     Position anchorPosition;
@@ -157,6 +160,8 @@ struct ActiveReplaySession
     uint32 packetBudgetPerUpdate = 60;
     uint64 lastAppliedActorGuid = 0;
     uint32 lastAppliedActorFlatIndex = 0;
+    uint32 lastPlaybackLogMs = 0;
+    std::string lastTeardownReason;
 };
 struct LiveActorRecorderState
 {
@@ -171,9 +176,124 @@ std::unordered_map<uint32, BgPlayersGuids> bgPlayersGuids;
 std::unordered_map<uint32, TeamRecorders> bgRecorders;
 std::unordered_map<uint32, LiveActorRecorderState> liveActorRecorders;
 std::unordered_map<uint64, ActiveReplaySession> activeReplaySessions;
+uint64 gReplayTraceCounter = 0;
 
 namespace
 {
+    enum class ReplayDebugFlag
+    {
+        General,
+        Hud,
+        Actors,
+        Playback,
+        Teardown,
+        Return
+    };
+
+    static bool ReplayDebugEnabled(ReplayDebugFlag flag)
+    {
+        if (!sConfigMgr->GetOption<bool>("ArenaReplay.Debug.Enable", false))
+            return false;
+
+        switch (flag)
+        {
+            case ReplayDebugFlag::General:
+                return true;
+            case ReplayDebugFlag::Hud:
+                return sConfigMgr->GetOption<bool>("ArenaReplay.Debug.LogHud", true);
+            case ReplayDebugFlag::Actors:
+                return sConfigMgr->GetOption<bool>("ArenaReplay.Debug.LogActors", true);
+            case ReplayDebugFlag::Playback:
+                return sConfigMgr->GetOption<bool>("ArenaReplay.Debug.LogPlayback", false);
+            case ReplayDebugFlag::Teardown:
+                return sConfigMgr->GetOption<bool>("ArenaReplay.Debug.LogTeardown", true);
+            case ReplayDebugFlag::Return:
+                return sConfigMgr->GetOption<bool>("ArenaReplay.Debug.LogReturn", true);
+        }
+
+        return false;
+    }
+
+    static bool ReplayDebugVerbose()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.Debug.Verbose", false);
+    }
+
+    static uint64 NextReplayTraceId()
+    {
+        ++gReplayTraceCounter;
+        if (gReplayTraceCounter == 0)
+            ++gReplayTraceCounter;
+        return gReplayTraceCounter;
+    }
+
+    static std::string ReplayPlayerTag(Player* player)
+    {
+        if (!player)
+            return "viewer=<null> viewerGuid=0";
+
+        std::ostringstream ss;
+        ss << "viewer=" << player->GetName() << " viewerGuid=" << player->GetGUID().GetCounter();
+        return ss.str();
+    }
+
+    static void ReplayLog(ReplayDebugFlag flag, ActiveReplaySession const* session, Player* player, char const* phase, std::string const& details)
+    {
+        if (!ReplayDebugEnabled(flag))
+            return;
+
+        uint64 traceId = session ? session->traceId : 0;
+        uint32 replayId = session ? session->replayId : 0;
+        LOG_INFO("server.loading", "[RTG][REPLAY][{}] trace={} replay={} {} {}", phase, traceId, replayId, ReplayPlayerTag(player), details);
+    }
+
+    static bool EvaluateReplayHudAllowance(Player* player, std::string* reason = nullptr)
+    {
+        auto fail = [reason](char const* why) -> bool
+        {
+            if (reason)
+                *reason = why;
+            return false;
+        };
+
+        if (!player || !player->GetSession())
+            return fail("missing_player_or_session");
+
+        auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
+        if (it == activeReplaySessions.end())
+            return fail("no_active_session");
+
+        ActiveReplaySession const& session = it->second;
+        if (session.teardownInProgress)
+            return fail("teardown_in_progress");
+
+        Battleground* bg = player->GetBattleground();
+        if (!bg)
+            return fail("no_battleground");
+
+        if (!bg->isArena())
+            return fail("not_arena");
+
+        if (session.battlegroundInstanceId == 0)
+            return fail("session_bg_zero");
+
+        if (bg->GetInstanceID() != session.battlegroundInstanceId)
+            return fail("session_bg_mismatch");
+
+        auto replayIt = bgReplayIds.find(bg->GetInstanceID());
+        if (replayIt == bgReplayIds.end())
+            return fail("bg_not_registered_as_replay");
+
+        if (replayIt->second != player->GetGUID().GetCounter())
+            return fail("replay_owner_mismatch");
+
+        if (loadedReplays.find(player->GetGUID().GetCounter()) == loadedReplays.end())
+            return fail("replay_not_loaded");
+
+        if (reason)
+            *reason = "allowed";
+        return true;
+    }
     static bool IsGuidInBgPlayers(Battleground* bg, ObjectGuid guid)
     {
         if (!bg || !guid)
@@ -491,35 +611,7 @@ namespace
 
     static bool IsReplayHudAllowed(Player* player)
     {
-        if (!player || !player->GetSession())
-            return false;
-
-        auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
-        if (it == activeReplaySessions.end())
-            return false;
-
-        ActiveReplaySession const& session = it->second;
-        if (session.teardownInProgress)
-            return false;
-
-        Battleground* bg = player->GetBattleground();
-        if (!bg || !bg->isArena())
-            return false;
-
-        if (session.battlegroundInstanceId == 0 || bg->GetInstanceID() != session.battlegroundInstanceId)
-            return false;
-
-        auto replayIt = bgReplayIds.find(bg->GetInstanceID());
-        if (replayIt == bgReplayIds.end())
-            return false;
-
-        if (replayIt->second != player->GetGUID().GetCounter())
-            return false;
-
-        if (loadedReplays.find(player->GetGUID().GetCounter()) == loadedReplays.end())
-            return false;
-
-        return true;
+        return EvaluateReplayHudAllowance(player, nullptr);
     }
 
     static void SendReplayHudMessage(Player* player, std::string const& body)
@@ -527,8 +619,29 @@ namespace
         if (!player || !player->GetSession())
             return;
 
-        if (body != "END" && !IsReplayHudAllowed(player))
+        std::string reason;
+        if (body != "END" && !EvaluateReplayHudAllowance(player, &reason))
+        {
+            if (ReplayDebugEnabled(ReplayDebugFlag::Hud) && ReplayDebugVerbose())
+            {
+                auto sessionIt = activeReplaySessions.find(player->GetGUID().GetCounter());
+                ActiveReplaySession const* session = sessionIt != activeReplaySessions.end() ? &sessionIt->second : nullptr;
+                Battleground* bg = player->GetBattleground();
+                std::ostringstream ss;
+                ss << "msg=" << body << " allowed=0 reason=" << reason
+                   << " playerBg=" << (bg ? bg->GetInstanceID() : 0)
+                   << " sessionBg=" << (session ? session->battlegroundInstanceId : 0);
+                ReplayLog(ReplayDebugFlag::Hud, session, player, "HUD", ss.str());
+            }
             return;
+        }
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::Hud) && ReplayDebugVerbose())
+        {
+            auto sessionIt = activeReplaySessions.find(player->GetGUID().GetCounter());
+            ActiveReplaySession const* session = sessionIt != activeReplaySessions.end() ? &sessionIt->second : nullptr;
+            ReplayLog(ReplayDebugFlag::Hud, session, player, "HUD", std::string("msg=") + body + " allowed=1");
+        }
 
         std::string text = std::string(GetReplayHudPrefix()) + body;
         ChatHandler(player->GetSession()).SendSysMessage(text.c_str());
@@ -762,6 +875,13 @@ namespace
 
         body << track->guid << '|' << track->name << '|' << GetClassToken(track->playerClass) << '|' << flatIndex << '|' << total;
         SendReplayHudMessage(replayer, body.str());
+        if (ReplayDebugEnabled(ReplayDebugFlag::Hud))
+        {
+            std::ostringstream ss;
+            ss << "force=" << (force ? 1 : 0) << " actorGuid=" << track->guid << " actorName=" << track->name
+               << " actorClass=" << GetClassToken(track->playerClass) << " actorIndex=" << flatIndex << '/' << total;
+            ReplayLog(ReplayDebugFlag::Hud, &session, replayer, "POV", ss.str());
+        }
         session.hudStarted = true;
         session.lastHudActorGuid = track->guid;
         session.lastHudActorFlatIndex = flatIndex;
@@ -814,6 +934,12 @@ namespace
             return;
 
         SendReplayHudMessage(replayer, payloadText);
+        if (ReplayDebugEnabled(ReplayDebugFlag::Hud) && (force || ReplayDebugVerbose()))
+        {
+            std::ostringstream ss;
+            ss << "force=" << (force ? 1 : 0) << " watcherCount=" << count;
+            ReplayLog(ReplayDebugFlag::Hud, &session, replayer, "WATCHERS", ss.str());
+        }
         session.lastHudWatcherCount = count;
         session.lastHudWatcherPayload = payloadText;
     }
@@ -872,7 +998,7 @@ namespace
         activeReplaySessions.erase(player->GetGUID().GetCounter());
     }
 
-    static void ExitReplayAndReturnToAnchor(Player* player, Battleground* bg)
+    static void ExitReplayAndReturnToAnchor(Player* player, Battleground* bg, char const* reason = "unknown")
     {
         if (!player)
             return;
@@ -886,15 +1012,60 @@ namespace
         }
 
         it->second.teardownInProgress = true;
+        it->second.lastTeardownReason = reason ? reason : "unknown";
         ActiveReplaySession session = it->second;
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
+        {
+            std::ostringstream ss;
+            ss << "reason=" << session.lastTeardownReason
+               << " playerMap=" << player->GetMapId()
+               << " playerBg=" << player->GetBattlegroundId()
+               << " sessionBg=" << session.battlegroundInstanceId
+               << " anchorMap=" << session.anchorMapId;
+            ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_BEGIN", ss.str());
+        }
+
         SendReplayHudEnd(player);
         RestoreReplayViewerState(player, session);
         loadedReplays.erase(viewerKey);
 
+        std::string action = "none";
         if (bg && player->GetBattlegroundId() == bg->GetInstanceID())
+        {
+            action = "leave_battleground";
             player->LeaveBattleground(bg);
+        }
         else if (session.anchorMapId != 0)
+        {
+            action = "return_to_anchor";
             ReturnReplayViewerToAnchor(player, session);
+        }
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
+        {
+            std::ostringstream ss;
+            ss << "reason=" << session.lastTeardownReason
+               << " action=" << action
+               << " map=" << player->GetMapId()
+               << " playerBg=" << player->GetBattlegroundId();
+            ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_ACTION", ss.str());
+        }
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::Return))
+        {
+            std::ostringstream ss;
+            ss << "reason=" << session.lastTeardownReason
+               << " map=" << player->GetMapId()
+               << " x=" << player->GetPositionX()
+               << " y=" << player->GetPositionY()
+               << " z=" << player->GetPositionZ()
+               << " o=" << player->GetOrientation()
+               << " inBg=" << (player->GetBattleground() ? 1 : 0)
+               << " hidden=" << (player->IsVisible() ? 0 : 1)
+               << " canFly=" << (player->CanFly() ? 1 : 0);
+            ReplayLog(ReplayDebugFlag::Return, &session, player, "RETURN_STATE", ss.str());
+        }
 
         activeReplaySessions.erase(viewerKey);
     }
@@ -1015,16 +1186,28 @@ namespace
         session.actorSpectateActive = true;
         session.lastAppliedActorGuid = track->guid;
         session.lastAppliedActorFlatIndex = flatIndex;
+        if (ReplayDebugEnabled(ReplayDebugFlag::Actors) && (forceImmediate || ReplayDebugVerbose()))
+        {
+            std::ostringstream ss;
+            ss << "force=" << (forceImmediate ? 1 : 0)
+               << " actorGuid=" << track->guid
+               << " actorName=" << track->name
+               << " actorIndex=" << flatIndex << '/' << GetReplayActorTotalCount(match)
+               << " x=" << targetX << " y=" << targetY << " z=" << targetZ << " o=" << frame.o;
+            ReplayLog(ReplayDebugFlag::Actors, &session, replayer, "APPLY", ss.str());
+        }
         return true;
     }
 
-    static void LockReplayViewerControl(Player* player, uint32 replayId)
+    static void LockReplayViewerControl(Player* player, uint32 replayId, uint32 replayBgInstanceId)
     {
         if (!player)
             return;
 
         ActiveReplaySession& session = activeReplaySessions[player->GetGUID().GetCounter()];
-        session.battlegroundInstanceId = player->GetBattlegroundId();
+        session.traceId = NextReplayTraceId();
+        session.priorBattlegroundInstanceId = player->GetBattlegroundId();
+        session.battlegroundInstanceId = replayBgInstanceId;
         session.replayId = replayId;
         session.anchorMapId = player->GetMapId();
         session.anchorPosition.Relocate(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
@@ -1046,6 +1229,20 @@ namespace
         session.packetBudgetPerUpdate = std::max<uint32>(15u, sConfigMgr->GetOption<uint32>("ArenaReplay.Playback.PacketBudgetPerUpdate", 40));
         session.lastAppliedActorGuid = 0;
         session.lastAppliedActorFlatIndex = 0;
+        session.lastPlaybackLogMs = 0;
+        session.lastTeardownReason.clear();
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::General))
+        {
+            std::ostringstream ss;
+            ss << "priorBg=" << session.priorBattlegroundInstanceId
+               << " replayBg=" << session.battlegroundInstanceId
+               << " anchorMap=" << session.anchorMapId
+               << " anchorX=" << session.anchorPosition.GetPositionX()
+               << " anchorY=" << session.anchorPosition.GetPositionY()
+               << " anchorZ=" << session.anchorPosition.GetPositionZ();
+            ReplayLog(ReplayDebugFlag::General, &session, player, "LOCK", ss.str());
+        }
 
         if (sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorOnly.LockMovement", true))
         {
@@ -1205,7 +1402,7 @@ public:
             }
             else if (bg->GetStartTime() >= session.replayCompleteAtMs)
             {
-                ExitReplayAndReturnToAnchor(replayer, bg);
+                ExitReplayAndReturnToAnchor(replayer, bg, "packet_stream_complete");
                 loadedReplays.erase(it);
                 return;
             }
@@ -1220,6 +1417,18 @@ public:
         {
             if (session.replayWarmupUntilMs == 1500)
                 session.replayWarmupUntilMs = bg->GetStartTime() + 1000;
+            if (ReplayDebugEnabled(ReplayDebugFlag::Playback) && (session.lastPlaybackLogMs == 0 || (bg->GetStartTime() >= session.lastPlaybackLogMs + 1000) || session.replayComplete))
+            {
+                session.lastPlaybackLogMs = bg->GetStartTime();
+                std::ostringstream ss;
+                ss << "remainingPackets=" << match.packets.size()
+                   << " packetsSent=" << packetsSentThisUpdate
+                   << " replayTimeMs=" << bg->GetStartTime()
+                   << " replayComplete=" << (session.replayComplete ? 1 : 0)
+                   << " actorGuid=" << session.lastAppliedActorGuid
+                   << " actorIndex=" << session.lastAppliedActorFlatIndex;
+                ReplayLog(ReplayDebugFlag::Playback, &session, replayer, "PLAYBACK", ss.str());
+            }
             if (session.teardownInProgress)
                 return;
             bool actorViewApplied = ApplyActorReplayView(replayer, match, session, bg->GetStartTime());
@@ -1325,7 +1534,7 @@ public:
         }
 
         if (isReplay && !bg->GetPlayers().empty())
-            ExitReplayAndReturnToAnchor(bg->GetPlayers().begin()->second, bg);
+            ExitReplayAndReturnToAnchor(bg->GetPlayers().begin()->second, bg, "battleground_end");
 
         bgReplayIds.erase(bg->GetInstanceID());
         bgPlayersGuids.erase(bg->GetInstanceID());
@@ -2205,7 +2414,7 @@ private:
         // TEAM_NEUTRAL can leave the replay instance without a valid team start location on some maps,
         // which can cascade into bad teleports/homebinds. Keep the player on their real faction team
         // while still marking them as spectator via SetPendingSpectatorForBG().
-        LockReplayViewerControl(player, replayId);
+        LockReplayViewerControl(player, replayId, bg->GetInstanceID());
         player->SetBattlegroundId(bg->GetInstanceID(), bgTypeId, queueSlot, true, false, teamId);
         player->SetEntryPoint();
         sBattlegroundMgr->SendToBattleground(player, bg->GetInstanceID(), bgTypeId);
@@ -2213,6 +2422,16 @@ private:
         player->GetSession()->SendPacket(&data);
         ActiveReplaySession& replaySession = activeReplaySessions[player->GetGUID().GetCounter()];
         replaySession.viewerWasParticipant = viewerWasParticipant;
+        if (ReplayDebugEnabled(ReplayDebugFlag::General))
+        {
+            std::ostringstream ss;
+            ss << "viewerWasParticipant=" << (viewerWasParticipant ? 1 : 0)
+               << " actualPlayerBg=" << player->GetBattlegroundId()
+               << " sessionBg=" << replaySession.battlegroundInstanceId
+               << " bgType=" << uint32(bgTypeId)
+               << " arenaType=" << uint32(bg->GetArenaType());
+            ReplayLog(ReplayDebugFlag::General, &replaySession, player, "ENTER_BG", ss.str());
+        }
         replaySession.actorSpectateOnWinnerTeam = sConfigMgr->GetOption<bool>("ArenaReplay.ActorSpectate.StartOnWinnerTeam", true);
         replaySession.actorTrackIndex = 0;
         replaySession.nextActorTeleportMs = 0;
@@ -2357,6 +2576,9 @@ public:
 
     void OnPlayerLogout(Player* player) override
     {
+                auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
+        if (it != activeReplaySessions.end() && ReplayDebugEnabled(ReplayDebugFlag::Teardown))
+            ReplayLog(ReplayDebugFlag::Teardown, &it->second, player, "LOGOUT", "reason=player_logout");
         ReleaseReplayViewerControl(player);
         loadedReplays.erase(player->GetGUID().GetCounter());
     }
@@ -2520,6 +2742,18 @@ public:
         Battleground* bg = player->GetBattleground();
         if (bg)
             ApplyActorReplayView(player, replayIt->second, sessionIt->second, bg->GetStartTime(), true);
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::Actors))
+        {
+            uint32 flatIndex = 0;
+            if (ActorTrack const* track = GetSelectedReplayActorTrack(replayIt->second, sessionIt->second, &flatIndex))
+            {
+                std::ostringstream ss;
+                ss << "delta=" << delta << " actorGuid=" << track->guid << " actorName=" << track->name
+                   << " actorIndex=" << flatIndex << '/' << GetReplayActorTotalCount(replayIt->second);
+                ReplayLog(ReplayDebugFlag::Actors, &sessionIt->second, player, "STEP", ss.str());
+            }
+        }
 
         SendReplayHudPov(player, replayIt->second, sessionIt->second, true);
         sessionIt->second.nextHudWatcherSyncMs = 0;

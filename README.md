@@ -74,6 +74,34 @@ This packaging is now tuned primarily for **arena-only replay** on RTG. Battlegr
 ### Current architecture note
 This remains a **hidden spectator-anchor replay system**, not a full cloned-actor renderer. The module is materially more stable for arena-only use, but legacy replay compatibility still depends on the quality of the recorded packet/actor data.
 
+## Replay diagnostics and proving workflow
+For active hardening, enable the replay trace spine in `conf/arena_replay.conf.dist`:
+
+- `ArenaReplay.Debug.Enable = 1`
+- `ArenaReplay.Debug.LogHud = 1`
+- `ArenaReplay.Debug.LogActors = 1`
+- `ArenaReplay.Debug.LogTeardown = 1`
+- `ArenaReplay.Debug.LogReturn = 1`
+- optionally `ArenaReplay.Debug.LogPlayback = 1` for once-per-second replay heartbeat lines
+
+The trace output uses a per-session `trace=` id so one replay run can be followed from:
+
+- `LOCK`
+- `ENTER_BG`
+- `HUD` / `POV` / `WATCHERS`
+- `STEP` / `APPLY`
+- `PLAYBACK`
+- `EXIT_BEGIN` / `EXIT_ACTION`
+- `RETURN_STATE`
+
+This is the intended basis for proving:
+
+- whether replay HUD gating is failing
+- whether actor-switch commands are applying a new POV immediately
+- which teardown owner path is returning the player badly
+- whether the viewer exits with stuck battleground or flight state
+
+
 
 ## RTG 5.3.0 arena replay hardening notes
 
