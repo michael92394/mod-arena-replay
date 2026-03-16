@@ -299,6 +299,54 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     A participant begins playback focused on their own actor
 #                     track when possible.
 #
+#    ArenaReplay.ActorSpectate.FollowDistance
+#        Description: Distance, in yards, that the hidden replay spectator camera
+#                     should stay behind the selected actor.
+#
+#                     Larger values create a wider chase camera and reduce the
+#                     chance that the viewer camera clips into the actor model.
+#
+#        Default:     2.25
+#                     0.0+ - Distance behind the actor
+#
+#        Example:     ArenaReplay.ActorSpectate.FollowDistance = 2.50
+#                     Keeps the replay camera slightly farther behind the actor.
+#
+#    ArenaReplay.ActorSpectate.FollowHeight
+#        Description: Vertical offset, in yards, applied to the replay spectator
+#                     camera above the selected actor's ground position.
+#
+#        Default:     1.75
+#
+#        Example:     ArenaReplay.ActorSpectate.FollowHeight = 1.90
+#                     Raises the camera slightly for better readability.
+#
+#    ArenaReplay.ActorSpectate.SnapDistance
+#        Description: Distance threshold, in yards, above which the replay
+#                     spectator camera will force an immediate teleport instead
+#                     of only smoothing orientation updates.
+#
+#                     Lower values keep the camera tighter to fast-moving actors.
+#
+#        Default:     1.10
+#
+#        Example:     ArenaReplay.ActorSpectate.SnapDistance = 1.25
+#                     Allows slightly more drift before forced correction.
+#
+#    ArenaReplay.ActorSpectate.OrientationLerpPct
+#        Description: Fraction of the remaining actor-facing delta applied during
+#                     non-teleport spectator camera updates.
+#
+#                     Higher values rotate the camera faster toward the tracked
+#                     actor orientation. Lower values are smoother but looser.
+#
+#        Default:     0.45
+#                     0.05 - Very soft rotation
+#                     1.00 - Immediate facing correction
+#
+#        Example:     ArenaReplay.ActorSpectate.OrientationLerpPct = 0.60
+#                     Rotates the camera more aggressively during follow.
+#
 #    ArenaReplay.Playback.PacketBudgetPerUpdate
 #        Description: Maximum number of recorded replay packets sent to the
 #                     viewer during a single battleground update tick.
@@ -321,6 +369,10 @@ ArenaReplay.ActorSpectate.SampleMs = 250
 ArenaReplay.ActorSpectate.TeleportMs = 125
 ArenaReplay.ActorSpectate.StartOnWinnerTeam = 1
 ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant = 1
+ArenaReplay.ActorSpectate.FollowDistance = 2.25
+ArenaReplay.ActorSpectate.FollowHeight = 1.75
+ArenaReplay.ActorSpectate.SnapDistance = 1.10
+ArenaReplay.ActorSpectate.OrientationLerpPct = 0.45
 ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 
 ########################################

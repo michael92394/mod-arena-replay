@@ -59,6 +59,29 @@ local function SafeNumber(v, fallback)
     return n
 end
 
+
+local function RunReplayCommand(command)
+    command = Trim(command or "")
+    if command == "" then
+        return
+    end
+
+    if ChatFrameEditBox and ChatFrameEditBox:IsShown() then
+        ChatFrameEditBox:SetText(command)
+        ChatEdit_SendText(ChatFrameEditBox, 0)
+        return
+    end
+
+    local editBox = DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.editBox
+    if editBox then
+        editBox:SetText(command)
+        ChatEdit_SendText(editBox, 0)
+        return
+    end
+
+    SendChatMessage(command, "SAY")
+end
+
 local function SavePosition()
     local p, _, _, x, y = HUD:GetPoint(1)
     RTGReplayHUDDB.point = p
@@ -151,7 +174,7 @@ HUD.prev:SetPoint("TOP", HUD, "TOP", -120, -28)
 HUD.prev:SetText("<")
 HUD.prev:SetScript("OnClick", function()
     if not state.active then return end
-    SendChatMessage(".rtgreplay prev", "SAY")
+    RunReplayCommand(".rtgreplay prev")
 end)
 
 HUD.next = CreateFrame("Button", nil, HUD, "UIPanelButtonTemplate")
@@ -160,7 +183,7 @@ HUD.next:SetPoint("TOP", HUD, "TOP", 120, -28)
 HUD.next:SetText(">")
 HUD.next:SetScript("OnClick", function()
     if not state.active then return end
-    SendChatMessage(".rtgreplay next", "SAY")
+    RunReplayCommand(".rtgreplay next")
 end)
 
 HUD.name = HUD:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")

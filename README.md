@@ -118,3 +118,20 @@ This pass focuses on making arena-only replay playback safer and more determinis
 
 ### Current architecture note
 This is still a hidden spectator-anchor replay system. It is substantially tighter and safer for arena replay viewing, but it is not yet a full cloned-actor scene renderer.
+
+
+## RTG 5.3.2 deterministic teardown and camera notes
+
+This pass moves ArenaReplay closer to production-readiness by making replay shutdown deterministic and reducing spectator-camera instability.
+
+### Included fixes
+- Added a replay teardown request/execute pipeline so replay completion, battleground end, and logout converge on one authoritative exit owner.
+- Delayed packet-stream-complete teardown into a scheduled exit window instead of collapsing playback and teardown in the same update tick.
+- Exit path selection now prefers anchor return for normal world-opened replay sessions and only prefers battleground leave when the viewer actually came from a battleground context.
+- Viewer state restoration now normalizes control, visibility, gravity, hover, and fall state before session release.
+- Actor-follow camera now supports configurable follow distance, follow height, snap distance, and orientation interpolation to reduce jitter and actor clipping.
+- Added a dedicated debugging atlas at `brain_addendum/arena_replay_debugging_atlas.md` for future proving and repair passes.
+- Updated the Replay HUD addon button path to drive replay prev/next through the chat command pipeline more safely.
+
+### Current architecture note
+This is still a hidden spectator-anchor replay system. It is now more deterministic, easier to debug, and less prone to replay-end fallout, but it is not yet a full clone-rendered replay scene.

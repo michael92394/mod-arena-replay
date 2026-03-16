@@ -162,6 +162,17 @@ struct ActiveReplaySession
     uint32 lastAppliedActorFlatIndex = 0;
     uint32 lastPlaybackLogMs = 0;
     std::string lastTeardownReason;
+    bool teardownRequested = false;
+    uint32 teardownRequestedAtMs = 0;
+    uint32 teardownExecuteAtMs = 0;
+    bool teardownPreferBattlegroundLeave = false;
+    bool teardownHudEnded = false;
+    bool replayBgEnded = false;
+    uint32 cameraStallCount = 0;
+    float lastCameraX = 0.0f;
+    float lastCameraY = 0.0f;
+    float lastCameraZ = 0.0f;
+    float lastCameraO = 0.0f;
 };
 struct LiveActorRecorderState
 {
@@ -951,7 +962,7 @@ namespace
 
     static void ReturnReplayViewerToAnchor(Player* player, ActiveReplaySession const& session)
     {
-        if (!player)
+        if (!player || session.anchorMapId == 0)
             return;
 
         player->TeleportTo(session.anchorMapId,
@@ -979,6 +990,137 @@ namespace
             player->SetVisible(true);
     }
 
+    static bool ShouldPreferBattlegroundLeave(ActiveReplaySession const& session)
+    {
+        return session.priorBattlegroundInstanceId != 0 && session.priorBattlegroundInstanceId != session.battlegroundInstanceId;
+    }
+
+    static void RequestReplayTeardown(Player* player, Battleground* bg, char const* reason = "unknown", uint32 delayMs = 0)
+    {
+        if (!player)
+            return;
+
+        auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
+        if (it == activeReplaySessions.end())
+        {
+            loadedReplays.erase(player->GetGUID().GetCounter());
+            return;
+        }
+
+        ActiveReplaySession& session = it->second;
+        uint32 nowMs = bg ? bg->GetStartTime() : 0;
+        if (!session.teardownRequested)
+        {
+            session.teardownRequested = true;
+            session.teardownRequestedAtMs = nowMs;
+            session.teardownExecuteAtMs = nowMs + delayMs;
+            session.teardownInProgress = true;
+            session.lastTeardownReason = reason ? reason : "unknown";
+            session.teardownPreferBattlegroundLeave = ShouldPreferBattlegroundLeave(session);
+
+            if (!session.teardownHudEnded)
+            {
+                SendReplayHudEnd(player);
+                session.teardownHudEnded = true;
+            }
+
+            if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
+            {
+                std::ostringstream ss;
+                ss << "reason=" << session.lastTeardownReason
+                   << " delayMs=" << delayMs
+                   << " nowMs=" << nowMs
+                   << " executeAtMs=" << session.teardownExecuteAtMs
+                   << " preferLeave=" << (session.teardownPreferBattlegroundLeave ? 1 : 0)
+                   << " playerMap=" << player->GetMapId()
+                   << " playerBg=" << player->GetBattlegroundId()
+                   << " sessionBg=" << session.battlegroundInstanceId
+                   << " replayBgEnded=" << (session.replayBgEnded ? 1 : 0)
+                   << " anchorMap=" << session.anchorMapId;
+                ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_REQUEST", ss.str());
+            }
+        }
+        else if (delayMs > 0)
+        {
+            uint32 wanted = nowMs + delayMs;
+            if (session.teardownExecuteAtMs == 0 || wanted < session.teardownExecuteAtMs)
+                session.teardownExecuteAtMs = wanted;
+        }
+    }
+
+    static void PerformReplayTeardown(Player* player, Battleground* bg)
+    {
+        if (!player)
+            return;
+
+        uint64 viewerKey = player->GetGUID().GetCounter();
+        auto it = activeReplaySessions.find(viewerKey);
+        if (it == activeReplaySessions.end())
+        {
+            loadedReplays.erase(viewerKey);
+            return;
+        }
+
+        ActiveReplaySession session = it->second;
+        if (!session.teardownRequested)
+            RequestReplayTeardown(player, bg, "implicit_teardown", 0);
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
+        {
+            std::ostringstream ss;
+            ss << "reason=" << session.lastTeardownReason
+               << " requestedAtMs=" << session.teardownRequestedAtMs
+               << " executeAtMs=" << session.teardownExecuteAtMs
+               << " playerMap=" << player->GetMapId()
+               << " playerBg=" << player->GetBattlegroundId()
+               << " sessionBg=" << session.battlegroundInstanceId
+               << " replayBgEnded=" << (session.replayBgEnded ? 1 : 0);
+            ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_BEGIN", ss.str());
+        }
+
+        RestoreReplayViewerState(player, session);
+        loadedReplays.erase(viewerKey);
+
+        std::string action = "return_to_anchor";
+        bool canLeaveBattleground = session.teardownPreferBattlegroundLeave && bg && !session.replayBgEnded && player->GetBattlegroundId() == bg->GetInstanceID();
+        if (canLeaveBattleground)
+        {
+            action = "leave_battleground";
+            player->LeaveBattleground(bg);
+        }
+        else if (session.anchorMapId != 0)
+            ReturnReplayViewerToAnchor(player, session);
+        else
+            action = "restore_only";
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
+        {
+            std::ostringstream ss;
+            ss << "reason=" << session.lastTeardownReason
+               << " action=" << action
+               << " map=" << player->GetMapId()
+               << " playerBg=" << player->GetBattlegroundId();
+            ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_PATH", ss.str());
+        }
+
+        if (ReplayDebugEnabled(ReplayDebugFlag::Return))
+        {
+            std::ostringstream ss;
+            ss << "reason=" << session.lastTeardownReason
+               << " map=" << player->GetMapId()
+               << " x=" << player->GetPositionX()
+               << " y=" << player->GetPositionY()
+               << " z=" << player->GetPositionZ()
+               << " o=" << player->GetOrientation()
+               << " inBg=" << (player->GetBattleground() ? 1 : 0)
+               << " hidden=" << (player->IsVisible() ? 0 : 1)
+               << " canFly=" << (player->CanFly() ? 1 : 0);
+            ReplayLog(ReplayDebugFlag::Return, &session, player, "RETURN_STATE", ss.str());
+        }
+
+        activeReplaySessions.erase(viewerKey);
+    }
+
 	static void ReleaseReplayViewerControl(Player* player)
     {
         if (!player)
@@ -1000,74 +1142,8 @@ namespace
 
     static void ExitReplayAndReturnToAnchor(Player* player, Battleground* bg, char const* reason = "unknown")
     {
-        if (!player)
-            return;
-
-        uint64 viewerKey = player->GetGUID().GetCounter();
-        auto it = activeReplaySessions.find(viewerKey);
-        if (it == activeReplaySessions.end())
-        {
-            loadedReplays.erase(viewerKey);
-            return;
-        }
-
-        it->second.teardownInProgress = true;
-        it->second.lastTeardownReason = reason ? reason : "unknown";
-        ActiveReplaySession session = it->second;
-
-        if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
-        {
-            std::ostringstream ss;
-            ss << "reason=" << session.lastTeardownReason
-               << " playerMap=" << player->GetMapId()
-               << " playerBg=" << player->GetBattlegroundId()
-               << " sessionBg=" << session.battlegroundInstanceId
-               << " anchorMap=" << session.anchorMapId;
-            ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_BEGIN", ss.str());
-        }
-
-        SendReplayHudEnd(player);
-        RestoreReplayViewerState(player, session);
-        loadedReplays.erase(viewerKey);
-
-        std::string action = "none";
-        if (bg && player->GetBattlegroundId() == bg->GetInstanceID())
-        {
-            action = "leave_battleground";
-            player->LeaveBattleground(bg);
-        }
-        else if (session.anchorMapId != 0)
-        {
-            action = "return_to_anchor";
-            ReturnReplayViewerToAnchor(player, session);
-        }
-
-        if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
-        {
-            std::ostringstream ss;
-            ss << "reason=" << session.lastTeardownReason
-               << " action=" << action
-               << " map=" << player->GetMapId()
-               << " playerBg=" << player->GetBattlegroundId();
-            ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_ACTION", ss.str());
-        }
-
-        if (ReplayDebugEnabled(ReplayDebugFlag::Return))
-        {
-            std::ostringstream ss;
-            ss << "reason=" << session.lastTeardownReason
-               << " map=" << player->GetMapId()
-               << " x=" << player->GetPositionX()
-               << " y=" << player->GetPositionY()
-               << " z=" << player->GetPositionZ()
-               << " o=" << player->GetOrientation()
-               << " inBg=" << (player->GetBattleground() ? 1 : 0)
-               << " hidden=" << (player->IsVisible() ? 0 : 1)
-               << " canFly=" << (player->CanFly() ? 1 : 0);
-            ReplayLog(ReplayDebugFlag::Return, &session, player, "RETURN_STATE", ss.str());
-        }
-
-        activeReplaySessions.erase(viewerKey);
+        RequestReplayTeardown(player, bg, reason, 0);
+        PerformReplayTeardown(player, bg);
     }
 
     static void ResetActorReplayView(Player* replayer, ActiveReplaySession& session)
@@ -1171,18 +1247,41 @@ namespace
             return false;
         }
 
-        float eyeLift = 1.6f;
-        float targetX = frame.x;
-        float targetY = frame.y;
-        float targetZ = frame.z + eyeLift;
+        float followDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.FollowDistance", 2.25f));
+        float followHeight = sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.FollowHeight", 1.75f);
+        float snapDistance = std::max(0.5f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.SnapDistance", 1.10f));
+        float orientationLerpPct = std::min(1.0f, std::max(0.05f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.OrientationLerpPct", 0.45f)));
+
+        float targetX = frame.x - std::cos(frame.o) * followDistance;
+        float targetY = frame.y - std::sin(frame.o) * followDistance;
+        float targetZ = frame.z + followHeight;
         float dx = replayer->GetPositionX() - targetX;
         float dy = replayer->GetPositionY() - targetY;
         float dz = replayer->GetPositionZ() - targetZ;
         float distSq = dx * dx + dy * dy + dz * dz;
-        if (forceImmediate || distSq > 1.0f)
-            replayer->NearTeleportTo(targetX, targetY, targetZ, frame.o);
-        else if (std::abs(replayer->GetOrientation() - frame.o) > 0.05f)
-            replayer->SetFacingTo(frame.o);
+        float targetO = frame.o;
+        bool stalled = (distSq < 0.01f && std::abs(session.lastCameraX - targetX) < 0.01f && std::abs(session.lastCameraY - targetY) < 0.01f && std::abs(session.lastCameraZ - targetZ) < 0.01f);
+        if (stalled)
+            ++session.cameraStallCount;
+        else
+            session.cameraStallCount = 0;
+
+        if (forceImmediate || distSq > (snapDistance * snapDistance) || session.cameraStallCount >= 8)
+            replayer->NearTeleportTo(targetX, targetY, targetZ, targetO);
+        else
+        {
+            float currentO = replayer->GetOrientation();
+            float diffO = targetO - currentO;
+            while (diffO > float(M_PI)) diffO -= float(2.0 * M_PI);
+            while (diffO < float(-M_PI)) diffO += float(2.0 * M_PI);
+            if (std::abs(diffO) > 0.02f)
+                replayer->SetFacingTo(currentO + diffO * orientationLerpPct);
+        }
+
+        session.lastCameraX = targetX;
+        session.lastCameraY = targetY;
+        session.lastCameraZ = targetZ;
+        session.lastCameraO = targetO;
         session.actorSpectateActive = true;
         session.lastAppliedActorGuid = track->guid;
         session.lastAppliedActorFlatIndex = flatIndex;
@@ -1231,6 +1330,17 @@ namespace
         session.lastAppliedActorFlatIndex = 0;
         session.lastPlaybackLogMs = 0;
         session.lastTeardownReason.clear();
+        session.teardownRequested = false;
+        session.teardownRequestedAtMs = 0;
+        session.teardownExecuteAtMs = 0;
+        session.teardownPreferBattlegroundLeave = ShouldPreferBattlegroundLeave(session);
+        session.teardownHudEnded = false;
+        session.replayBgEnded = false;
+        session.cameraStallCount = 0;
+        session.lastCameraX = player->GetPositionX();
+        session.lastCameraY = player->GetPositionY();
+        session.lastCameraZ = player->GetPositionZ();
+        session.lastCameraO = player->GetOrientation();
 
         if (ReplayDebugEnabled(ReplayDebugFlag::General))
         {
@@ -1399,12 +1509,7 @@ public:
             {
                 session.replayComplete = true;
                 session.replayCompleteAtMs = bg->GetStartTime() + 1500;
-            }
-            else if (bg->GetStartTime() >= session.replayCompleteAtMs)
-            {
-                ExitReplayAndReturnToAnchor(replayer, bg, "packet_stream_complete");
-                loadedReplays.erase(it);
-                return;
+                RequestReplayTeardown(replayer, bg, "packet_stream_complete", 1500);
             }
         }
         else
@@ -1428,6 +1533,24 @@ public:
                    << " actorGuid=" << session.lastAppliedActorGuid
                    << " actorIndex=" << session.lastAppliedActorFlatIndex;
                 ReplayLog(ReplayDebugFlag::Playback, &session, replayer, "PLAYBACK", ss.str());
+            }
+            if (session.teardownRequested)
+            {
+                if (bg->GetStartTime() >= session.teardownExecuteAtMs)
+                {
+                    PerformReplayTeardown(replayer, bg);
+                    return;
+                }
+
+                if (ReplayDebugEnabled(ReplayDebugFlag::Teardown) && ReplayDebugVerbose())
+                {
+                    std::ostringstream ss;
+                    ss << "reason=" << session.lastTeardownReason
+                       << " nowMs=" << bg->GetStartTime()
+                       << " executeAtMs=" << session.teardownExecuteAtMs;
+                    ReplayLog(ReplayDebugFlag::Teardown, &session, replayer, "EXIT_PENDING", ss.str());
+                }
+                return;
             }
             if (session.teardownInProgress)
                 return;
@@ -1459,9 +1582,11 @@ public:
                         ActorFrame frame = GetInterpolatedActorFrame(*track, bg->GetStartTime(), haveFrame);
                         if (haveFrame)
                         {
-                            anchorX = frame.x;
-                            anchorY = frame.y;
-                            anchorZ = frame.z + 1.6f;
+                            float followDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.FollowDistance", 2.25f));
+                            float followHeight = sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.FollowHeight", 1.75f);
+                            anchorX = frame.x - std::cos(frame.o) * followDistance;
+                            anchorY = frame.y - std::sin(frame.o) * followDistance;
+                            anchorZ = frame.z + followHeight;
                             anchorO = frame.o;
                         }
                     }
@@ -1534,7 +1659,16 @@ public:
         }
 
         if (isReplay && !bg->GetPlayers().empty())
-            ExitReplayAndReturnToAnchor(bg->GetPlayers().begin()->second, bg, "battleground_end");
+        {
+            Player* viewer = bg->GetPlayers().begin()->second;
+            auto sessionIt = viewer ? activeReplaySessions.find(viewer->GetGUID().GetCounter()) : activeReplaySessions.end();
+            if (viewer && sessionIt != activeReplaySessions.end())
+            {
+                sessionIt->second.replayBgEnded = true;
+                RequestReplayTeardown(viewer, bg, "battleground_end", 0);
+                PerformReplayTeardown(viewer, bg);
+            }
+        }
 
         bgReplayIds.erase(bg->GetInstanceID());
         bgPlayersGuids.erase(bg->GetInstanceID());
@@ -2577,8 +2711,13 @@ public:
     void OnPlayerLogout(Player* player) override
     {
                 auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
-        if (it != activeReplaySessions.end() && ReplayDebugEnabled(ReplayDebugFlag::Teardown))
-            ReplayLog(ReplayDebugFlag::Teardown, &it->second, player, "LOGOUT", "reason=player_logout");
+        if (it != activeReplaySessions.end())
+        {
+            if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
+                ReplayLog(ReplayDebugFlag::Teardown, &it->second, player, "LOGOUT", "reason=player_logout");
+            it->second.replayBgEnded = true;
+            RequestReplayTeardown(player, player->GetBattleground(), "player_logout", 0);
+        }
         ReleaseReplayViewerControl(player);
         loadedReplays.erase(player->GetGUID().GetCounter());
     }
