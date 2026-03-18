@@ -292,6 +292,11 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     track exists, start playback on their own recorded actor
 #                     instead of using the normal first-team selection.
 #
+#                     When this happens, the live viewer avatar is used as the
+#                     self-actor bridge during playback so the participant can
+#                     actually watch their own side instead of only the opposing
+#                     team.
+#
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
@@ -397,6 +402,9 @@ ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 #
 #                     This helps preserve controlled replay viewing behavior and
 #                     reduces the chance of the viewer interfering with playback.
+#                     Replay teardown now force-restores client control, gravity,
+#                     hover, and visibility again on exit to reduce stuck
+#                     levitation states after playback ends.
 #
 #        Default:     1 - Enabled
 #                     0 - Disabled

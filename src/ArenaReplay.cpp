@@ -154,6 +154,7 @@ struct ActiveReplaySession
     uint32 replayWarmupUntilMs = 0;
     bool replayMovementStabilized = false;
     bool viewerHidden = false;
+    bool selfActorViewActive = false;
     bool teardownInProgress = false;
     bool replayComplete = false;
     uint32 replayCompleteAtMs = 0;
@@ -980,13 +981,14 @@ namespace
         if (session.movementLocked)
             player->SetClientControl(player, true);
 
+        player->StopMoving();
         player->SetCanFly(false);
         player->SetDisableGravity(false);
         player->SetHover(false);
         player->SetClientControl(player, true);
         player->StopMoving();
 
-        if (session.viewerHidden || !player->IsVisible())
+        if (session.viewerHidden || session.selfActorViewActive || !player->IsVisible())
             player->SetVisible(true);
     }
 
@@ -1078,6 +1080,7 @@ namespace
             ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_BEGIN", ss.str());
         }
 
+        ResetActorReplayView(player, session);
         RestoreReplayViewerState(player, session);
         loadedReplays.erase(viewerKey);
 
@@ -1092,6 +1095,8 @@ namespace
             ReturnReplayViewerToAnchor(player, session);
         else
             action = "restore_only";
+
+        RestoreReplayViewerState(player, session);
 
         if (ReplayDebugEnabled(ReplayDebugFlag::Teardown))
         {
@@ -1131,9 +1136,11 @@ namespace
             RestoreReplayViewerState(player, it->second);
         else
         {
+            player->StopMoving();
             player->SetCanFly(false);
             player->SetDisableGravity(false);
             player->SetHover(false);
+            player->SetClientControl(player, true);
             player->SetVisible(true);
         }
 
@@ -1152,6 +1159,7 @@ namespace
             return;
 
         session.actorSpectateActive = false;
+        session.selfActorViewActive = false;
         session.nextActorTeleportMs = 0;
     }
 
@@ -1225,10 +1233,24 @@ namespace
             session.replayMovementStabilized = true;
         }
 
-        if (!session.viewerHidden || replayer->IsVisible())
+        bool selfActorTrack = session.viewerWasParticipant && track->guid == replayer->GetGUID().GetRawValue();
+        if (selfActorTrack)
         {
-            replayer->SetVisible(false);
-            session.viewerHidden = true;
+            if (session.viewerHidden || !replayer->IsVisible())
+            {
+                replayer->SetVisible(true);
+                session.viewerHidden = false;
+            }
+            session.selfActorViewActive = true;
+        }
+        else
+        {
+            if (!session.viewerHidden || replayer->IsVisible())
+            {
+                replayer->SetVisible(false);
+                session.viewerHidden = true;
+            }
+            session.selfActorViewActive = false;
         }
 
         bool actorChanged = (session.lastAppliedActorGuid != track->guid || session.lastAppliedActorFlatIndex != flatIndex);
@@ -1292,6 +1314,7 @@ namespace
                << " actorGuid=" << track->guid
                << " actorName=" << track->name
                << " actorIndex=" << flatIndex << '/' << GetReplayActorTotalCount(match)
+               << " selfActorView=" << (selfActorTrack ? 1 : 0)
                << " x=" << targetX << " y=" << targetY << " z=" << targetZ << " o=" << frame.o;
             ReplayLog(ReplayDebugFlag::Actors, &session, replayer, "APPLY", ss.str());
         }
@@ -1322,6 +1345,7 @@ namespace
         session.replayWarmupUntilMs = 1500;
         session.replayMovementStabilized = false;
         session.viewerHidden = false;
+        session.selfActorViewActive = false;
         session.teardownInProgress = false;
         session.replayComplete = false;
         session.replayCompleteAtMs = 0;

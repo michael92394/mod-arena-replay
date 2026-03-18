@@ -179,3 +179,27 @@ ArenaReplay.Debug.LogReturn = 1
 
 ## Operational rule
 Do not skip the atlas and jump straight to speculative fixes. ArenaReplay regressions are almost always easier to solve once the exact lifecycle phase is proven.
+
+
+### Pattern 6: Participant self-watch only shows the enemy team
+Check:
+- whether the replay has actor tracks at all
+- whether `StartOnSelfWhenParticipant` is enabled
+- whether `APPLY` lines show `selfActorView=1` when the participant track is selected
+
+Likely causes:
+- viewer actor track missing from the saved replay
+- participant selection never landed on the viewer track
+- viewer was still being hidden during self-actor application
+
+### Pattern 7: Replay exit leaves the player hovering or unable to jump
+Check:
+- `EXIT_BEGIN`
+- `EXIT_PATH`
+- `RETURN_STATE`
+- whether cleanup happened both before and after the final return path
+
+Likely causes:
+- gravity/hover/client-control cleanup only happened before battleground leave or anchor return
+- actor-view state was not reset before teardown
+- release fallback path skipped full viewer-state restoration
