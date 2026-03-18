@@ -10,6 +10,8 @@
 #include "CharacterDatabase.h"
 #include "Chat.h"
 #include "Config.h"
+#include "Creature.h"
+#include "Map.h"
 #include "Opcodes.h"
 #include "Player.h"
 #include "PlayerGossip.h"
@@ -129,6 +131,11 @@ struct MatchRecord
 };
 struct BgPlayersGuids { std::string alliancePlayerGuids; std::string hordePlayerGuids; };
 struct TeamRecorders { ObjectGuid alliance; ObjectGuid horde; };
+struct ReplayCloneBinding
+{
+    uint64 actorGuid = 0;
+    ObjectGuid cloneGuid;
+};
 struct ActiveReplaySession
 {
     uint64 traceId = 0;
@@ -154,7 +161,6 @@ struct ActiveReplaySession
     uint32 replayWarmupUntilMs = 0;
     bool replayMovementStabilized = false;
     bool viewerHidden = false;
-    bool selfActorViewActive = false;
     bool teardownInProgress = false;
     bool replayComplete = false;
     uint32 replayCompleteAtMs = 0;
@@ -169,6 +175,9 @@ struct ActiveReplaySession
     bool teardownPreferBattlegroundLeave = false;
     bool teardownHudEnded = false;
     bool replayBgEnded = false;
+    bool cloneSceneBuilt = false;
+    uint32 nextCloneSyncMs = 0;
+    std::vector<ReplayCloneBinding> cloneBindings;
     uint32 cameraStallCount = 0;
     float lastCameraX = 0.0f;
     float lastCameraY = 0.0f;
@@ -192,6 +201,8 @@ uint64 gReplayTraceCounter = 0;
 
 namespace
 {
+    static void ResetActorReplayView(Player* replayer, ActiveReplaySession& session);
+
     enum class ReplayDebugFlag
     {
         General,
@@ -973,7 +984,110 @@ namespace
             session.anchorPosition.GetOrientation());
     }
 
-    static void ResetActorReplayView(Player* replayer, ActiveReplaySession& session);
+    static constexpr uint32 REPLAY_SURROGATE_CLONE_ENTRY = 91012;
+
+    static ActorTrack const* FindReplayActorTrackByGuid(MatchRecord const& match, uint64 actorGuid)
+    {
+        for (ActorTrack const& track : match.winnerActorTracks)
+            if (track.guid == actorGuid && IsReplayActorTrackPlayable(track))
+                return &track;
+        for (ActorTrack const& track : match.loserActorTracks)
+            if (track.guid == actorGuid && IsReplayActorTrackPlayable(track))
+                return &track;
+        return nullptr;
+    }
+
+    static Creature* FindReplayClone(Player* viewer, ActiveReplaySession const& session, uint64 actorGuid)
+    {
+        if (!viewer || !viewer->GetMap())
+            return nullptr;
+
+        for (ReplayCloneBinding const& binding : session.cloneBindings)
+            if (binding.actorGuid == actorGuid)
+                return viewer->GetMap()->GetCreature(binding.cloneGuid);
+
+        return nullptr;
+    }
+
+    static void DespawnReplayActorClones(Player* viewer, ActiveReplaySession& session)
+    {
+        if (viewer && viewer->GetMap())
+        {
+            for (ReplayCloneBinding const& binding : session.cloneBindings)
+                if (Creature* clone = viewer->GetMap()->GetCreature(binding.cloneGuid))
+                    clone->DespawnOrUnsummon(0);
+        }
+
+        session.cloneBindings.clear();
+        session.cloneSceneBuilt = false;
+        session.nextCloneSyncMs = 0;
+    }
+
+    static bool BuildReplayActorCloneScene(Player* viewer, MatchRecord const& match, ActiveReplaySession& session)
+    {
+        if (!viewer || !viewer->GetMap())
+            return false;
+
+        if (session.cloneSceneBuilt)
+            return !session.cloneBindings.empty();
+
+        std::vector<ReplayActorSelectionRef> playable = BuildPlayableReplayActorSelections(match);
+        for (ReplayActorSelectionRef const& ref : playable)
+        {
+            std::vector<ActorTrack> const* tracks = ref.winnerSide ? &match.winnerActorTracks : &match.loserActorTracks;
+            if (!tracks || ref.trackIndex >= tracks->size())
+                continue;
+
+            ActorTrack const& track = (*tracks)[ref.trackIndex];
+            if (!IsReplayActorTrackPlayable(track) || track.frames.empty())
+                continue;
+
+            ActorFrame const& frame = track.frames.front();
+            Creature* clone = viewer->SummonCreature(REPLAY_SURROGATE_CLONE_ENTRY, frame.x, frame.y, frame.z, frame.o, TEMPSUMMON_MANUAL_DESPAWN, 0);
+            if (!clone)
+                continue;
+
+            clone->SetReactState(REACT_PASSIVE);
+            clone->SetFaction(35);
+            clone->SetCanFly(true);
+            clone->SetDisableGravity(true);
+            clone->SetHover(true);
+            clone->SetUInt32Value(UNIT_FIELD_FLAGS, clone->GetUInt32Value(UNIT_FIELD_FLAGS) | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_PACIFIED);
+            session.cloneBindings.push_back({ track.guid, clone->GetGUID() });
+        }
+
+        session.cloneSceneBuilt = true;
+        return !session.cloneBindings.empty();
+    }
+
+    static void SyncReplayActorClones(Player* viewer, MatchRecord const& match, ActiveReplaySession& session, uint32 nowMs, bool forceImmediate = false)
+    {
+        if (!viewer || !viewer->GetMap() || session.teardownInProgress)
+            return;
+
+        if (!BuildReplayActorCloneScene(viewer, match, session))
+            return;
+
+        if (!forceImmediate && session.nextCloneSyncMs > nowMs)
+            return;
+
+        session.nextCloneSyncMs = nowMs + std::max<uint32>(50u, sConfigMgr->GetOption<uint32>("ArenaReplay.ActorSpectate.TeleportMs", 125));
+
+        for (ReplayCloneBinding const& binding : session.cloneBindings)
+        {
+            Creature* clone = viewer->GetMap()->GetCreature(binding.cloneGuid);
+            ActorTrack const* track = FindReplayActorTrackByGuid(match, binding.actorGuid);
+            if (!clone || !track)
+                continue;
+
+            bool haveFrame = false;
+            ActorFrame frame = GetInterpolatedActorFrame(*track, nowMs, haveFrame);
+            if (!haveFrame)
+                continue;
+
+            clone->NearTeleportTo(frame.x, frame.y, frame.z, frame.o);
+        }
+    }
 
     static void RestoreReplayViewerState(Player* player, ActiveReplaySession const& session)
     {
@@ -983,14 +1097,13 @@ namespace
         if (session.movementLocked)
             player->SetClientControl(player, true);
 
-        player->StopMoving();
         player->SetCanFly(false);
         player->SetDisableGravity(false);
         player->SetHover(false);
         player->SetClientControl(player, true);
         player->StopMoving();
 
-        if (session.viewerHidden || session.selfActorViewActive || !player->IsVisible())
+        if (session.viewerHidden || !player->IsVisible())
             player->SetVisible(true);
     }
 
@@ -1082,7 +1195,13 @@ namespace
             ReplayLog(ReplayDebugFlag::Teardown, &session, player, "EXIT_BEGIN", ss.str());
         }
 
-        ResetActorReplayView(player, session);
+        auto liveIt = activeReplaySessions.find(viewerKey);
+        if (liveIt != activeReplaySessions.end())
+        {
+            ResetActorReplayView(player, liveIt->second);
+            DespawnReplayActorClones(player, liveIt->second);
+        }
+
         RestoreReplayViewerState(player, session);
         loadedReplays.erase(viewerKey);
 
@@ -1135,14 +1254,16 @@ namespace
 
         auto it = activeReplaySessions.find(player->GetGUID().GetCounter());
         if (it != activeReplaySessions.end())
+        {
+            ResetActorReplayView(player, it->second);
+            DespawnReplayActorClones(player, it->second);
             RestoreReplayViewerState(player, it->second);
+        }
         else
         {
-            player->StopMoving();
             player->SetCanFly(false);
             player->SetDisableGravity(false);
             player->SetHover(false);
-            player->SetClientControl(player, true);
             player->SetVisible(true);
         }
 
@@ -1161,7 +1282,6 @@ namespace
             return;
 
         session.actorSpectateActive = false;
-        session.selfActorViewActive = false;
         session.nextActorTeleportMs = 0;
     }
 
@@ -1210,6 +1330,8 @@ namespace
         if (!replayer || !sConfigMgr->GetOption<bool>("ArenaReplay.ActorSpectate.Enable", true) || session.teardownInProgress)
             return false;
 
+        SyncReplayActorClones(replayer, match, session, nowMs, forceImmediate);
+
         if (!forceImmediate && session.replayWarmupUntilMs > nowMs)
             return false;
 
@@ -1235,24 +1357,10 @@ namespace
             session.replayMovementStabilized = true;
         }
 
-        bool selfActorTrack = session.viewerWasParticipant && track->guid == replayer->GetGUID().GetRawValue();
-        if (selfActorTrack)
+        if (!session.viewerHidden || replayer->IsVisible())
         {
-            if (session.viewerHidden || !replayer->IsVisible())
-            {
-                replayer->SetVisible(true);
-                session.viewerHidden = false;
-            }
-            session.selfActorViewActive = true;
-        }
-        else
-        {
-            if (!session.viewerHidden || replayer->IsVisible())
-            {
-                replayer->SetVisible(false);
-                session.viewerHidden = true;
-            }
-            session.selfActorViewActive = false;
+            replayer->SetVisible(false);
+            session.viewerHidden = true;
         }
 
         bool actorChanged = (session.lastAppliedActorGuid != track->guid || session.lastAppliedActorFlatIndex != flatIndex);
@@ -1316,7 +1424,6 @@ namespace
                << " actorGuid=" << track->guid
                << " actorName=" << track->name
                << " actorIndex=" << flatIndex << '/' << GetReplayActorTotalCount(match)
-               << " selfActorView=" << (selfActorTrack ? 1 : 0)
                << " x=" << targetX << " y=" << targetY << " z=" << targetZ << " o=" << frame.o;
             ReplayLog(ReplayDebugFlag::Actors, &session, replayer, "APPLY", ss.str());
         }
@@ -1347,7 +1454,6 @@ namespace
         session.replayWarmupUntilMs = 1500;
         session.replayMovementStabilized = false;
         session.viewerHidden = false;
-        session.selfActorViewActive = false;
         session.teardownInProgress = false;
         session.replayComplete = false;
         session.replayCompleteAtMs = 0;
@@ -1362,6 +1468,9 @@ namespace
         session.teardownPreferBattlegroundLeave = ShouldPreferBattlegroundLeave(session);
         session.teardownHudEnded = false;
         session.replayBgEnded = false;
+        session.cloneSceneBuilt = false;
+        session.nextCloneSyncMs = 0;
+        session.cloneBindings.clear();
         session.cameraStallCount = 0;
         session.lastCameraX = player->GetPositionX();
         session.lastCameraY = player->GetPositionY();
@@ -1580,6 +1689,7 @@ public:
             }
             if (session.teardownInProgress)
                 return;
+            SyncReplayActorClones(replayer, match, session, bg->GetStartTime());
             bool actorViewApplied = ApplyActorReplayView(replayer, match, session, bg->GetStartTime());
             SendReplayHudPov(replayer, match, session, false);
             SendReplayHudWatchers(bg, replayer, match, session, false);
@@ -2628,6 +2738,7 @@ private:
             }
         }
 
+        BuildReplayActorCloneScene(player, record, replaySession);
         handler.PSendSysMessage("Replay ID {} begins.", replayId);
 
         if (sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorOnly.LockMovement", true))

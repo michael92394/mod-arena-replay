@@ -11,7 +11,9 @@ https://www.youtube.com/watch?v=7z0RA6Dsm9s
 
 ### Known issue
 
-This RTG branch is no longer limited to "only watch as an uninvolved spectator," but it is still not a full duplicate-unit renderer. Participant self-watch now uses a **viewer-avatar self-actor bridge** when actor tracks exist, which is materially better than the old hidden-goblin behavior, but it is still not the final GUID-remapped fake-actor architecture.
+it's not 100% done yet because if a player tries to watch a Replay of a game that he was in, the replay acts weirdly. Words of the guy who updated the module:
+"try spectating as a player who wasn't involved in the arena
+I need to change it so that it uses new duplicate players instead of"
 
 ### Usage
 
@@ -38,13 +40,14 @@ This branch adds a new **Replay Actor Spectate** layer. It does not yet spawn fu
 
 ### New config
 - `ArenaReplay.ActorSpectate.Enable`
+- `ArenaReplay.ActorSpectate.AutoCycleMs`
 - `ArenaReplay.ActorSpectate.FollowDistance`
 - `ArenaReplay.ActorSpectate.FollowHeight`
 - `ArenaReplay.ActorSpectate.StartOnWinnerTeam`
 - `ArenaReplay.ActorSpectate.StartOnSelfWhenParticipant`
 
 ### Important limitation
-This is **viewer-anchor actor spectating**, not the final cloned-actor / GUID-remap engine. The camera now follows recorded participant tracks, and participant self-watch can use the live viewer avatar as the self-actor bridge, but the module still does not spawn fully remapped duplicate units yet.
+This is **clone-target spectating scaffolding**, not the final cloned-actor / GUID-remap engine. The camera now follows recorded participant tracks instead of relying only on winner/loser POV anchor tracks, but it still does not spawn fully remapped duplicate units yet.
 
 
 ## RTG 5.2.7 replay stabilization notes
@@ -134,16 +137,14 @@ This pass moves ArenaReplay closer to production-readiness by making replay shut
 This is still a hidden spectator-anchor replay system. It is now more deterministic, easier to debug, and less prone to replay-end fallout, but it is not yet a full clone-rendered replay scene.
 
 
-## RTG 5.3.3 self-watch and replay-exit notes
+## RTG 5.3.4 spectator-clone stabilization notes
 
-This pass focused on two stubborn replay issues still visible in production testing: participant self-watch visibility and stuck levitation after replay exit.
+This pass moves ArenaReplay away from the loose self-actor bridge model and back toward a true spectator scene.
 
-### Included fixes
-- Participant self-watch now keeps the live viewer avatar visible when the selected actor track belongs to the viewer, allowing the viewer to watch their own side instead of only seeing the opposing team.
-- Replay actor debug output now marks whether a given apply step is using self-actor view.
-- Replay teardown now resets actor-view state before exit and re-applies viewer-state restoration after the chosen return path to harden post-replay cleanup.
-- Release fallback cleanup now explicitly restores client control and visibility even when no active replay session record survives.
-- Config documentation was reconciled against the code path so the distributed config surface remains limited to real, currently used keys.
+### What changed
+- Replay viewers stay in spectator control and are restored twice during teardown to reduce lingering levitate / no-jump states.
+- Replay sessions now build surrogate actor clones inside the replay battleground instance and keep them synchronized to actor tracks.
+- Teardown explicitly resets actor follow state and despawns replay clone actors before the session is erased.
 
-### Current architecture note
-This is still not the final fake-actor/clone renderer. It is a safer self-watch bridge built on top of the existing actor-track camera system, intended to reduce the hidden-viewer/goblin feel until a true duplicate-actor playback layer is implemented.
+### Important limitation
+This module still does **not** record full appearance/equipment snapshots, so the spawned replay clones are currently **surrogate clones**, not perfect visual replicas. They exist to restore actor presence in the scene, especially for self-watch and team completeness, while the deeper clone pipeline is being built.
