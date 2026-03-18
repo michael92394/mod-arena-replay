@@ -973,6 +973,8 @@ namespace
             session.anchorPosition.GetOrientation());
     }
 
+    static void ResetActorReplayView(Player* replayer, ActiveReplaySession& session);
+
     static void RestoreReplayViewerState(Player* player, ActiveReplaySession const& session)
     {
         if (!player)
