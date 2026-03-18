@@ -11,6 +11,7 @@
 #include "Chat.h"
 #include "Config.h"
 #include "Creature.h"
+#include "Item.h"
 #include "Map.h"
 #include "Opcodes.h"
 #include "Player.h"
@@ -118,6 +119,20 @@ struct ActorTrack
     std::string name;
     std::vector<ActorFrame> frames;
 };
+struct ReplayActorAppearanceSnapshot
+{
+    uint64 guid = 0;
+    bool winnerSide = false;
+    uint8 playerClass = 0;
+    uint8 race = 0;
+    uint8 gender = 0;
+    std::string name;
+    uint32 displayId = 0;
+    uint32 nativeDisplayId = 0;
+    uint32 mainhandDisplayId = 0;
+    uint32 offhandDisplayId = 0;
+    uint32 rangedDisplayId = 0;
+};
 struct MatchRecord
 {
     BattlegroundTypeId typeId;
@@ -128,6 +143,7 @@ struct MatchRecord
     std::vector<uint64> loserPlayerGuidList;
     std::vector<ActorTrack> winnerActorTracks;
     std::vector<ActorTrack> loserActorTracks;
+    std::unordered_map<uint64, ReplayActorAppearanceSnapshot> actorAppearanceSnapshots;
 };
 struct BgPlayersGuids { std::string alliancePlayerGuids; std::string hordePlayerGuids; };
 struct TeamRecorders { ObjectGuid alliance; ObjectGuid horde; };
@@ -207,6 +223,7 @@ namespace
 {
     static void ResetActorReplayView(Player* replayer, ActiveReplaySession& session);
     static ActorFrame GetInterpolatedActorFrame(ActorTrack const& track, uint32 nowMs, bool& ok);
+    static ReplayActorAppearanceSnapshot const* FindReplayActorAppearanceSnapshot(MatchRecord const& match, uint64 actorGuid);
     static Creature* EnsureReplayCameraAnchor(Player* viewer, MatchRecord const& match, ActiveReplaySession& session);
     static void BindReplayViewpoint(Player* viewer, MatchRecord const& match, ActiveReplaySession& session);
     static void ClearReplayViewpoint(Player* viewer, ActiveReplaySession& session);
@@ -1013,6 +1030,153 @@ namespace
         return nullptr;
     }
 
+    static uint32 GetPlayerEquippedItemDisplayId(Player* player, uint8 slot)
+    {
+        if (!player)
+            return 0;
+
+        Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!item || !item->GetTemplate())
+            return 0;
+
+        return item->GetTemplate()->DisplayInfoID;
+    }
+
+    static ReplayActorAppearanceSnapshot BuildReplayActorAppearanceSnapshot(Player* player, bool winnerSide)
+    {
+        ReplayActorAppearanceSnapshot snapshot;
+        if (!player)
+            return snapshot;
+
+        snapshot.guid = player->GetGUID().GetRawValue();
+        snapshot.winnerSide = winnerSide;
+        snapshot.playerClass = player->getClass();
+        snapshot.race = player->getRace();
+        snapshot.gender = player->getGender();
+        snapshot.name = player->GetName();
+        snapshot.displayId = player->GetDisplayId();
+        snapshot.nativeDisplayId = player->GetNativeDisplayId();
+        snapshot.mainhandDisplayId = GetPlayerEquippedItemDisplayId(player, EQUIPMENT_SLOT_MAINHAND);
+        snapshot.offhandDisplayId = GetPlayerEquippedItemDisplayId(player, EQUIPMENT_SLOT_OFFHAND);
+        snapshot.rangedDisplayId = GetPlayerEquippedItemDisplayId(player, EQUIPMENT_SLOT_RANGED);
+        return snapshot;
+    }
+
+    static void CaptureReplayActorAppearanceSnapshots(Battleground* bg, MatchRecord& match, TeamId winnerTeamId)
+    {
+        match.actorAppearanceSnapshots.clear();
+
+        if (!bg)
+            return;
+
+        for (auto const& playerPair : bg->GetPlayers())
+        {
+            Player* player = playerPair.second;
+            if (!player || player->IsSpectator())
+                continue;
+
+            bool winnerSide = player->GetBgTeamId() == winnerTeamId;
+            ReplayActorAppearanceSnapshot snapshot = BuildReplayActorAppearanceSnapshot(player, winnerSide);
+            if (!snapshot.guid)
+                continue;
+
+            match.actorAppearanceSnapshots[snapshot.guid] = std::move(snapshot);
+        }
+    }
+
+    static void PersistReplayActorAppearanceSnapshots(uint32 replayId, MatchRecord const& match)
+    {
+        if (!replayId)
+            return;
+
+        CharacterDatabase.Execute("DELETE FROM `character_arena_replay_actor_snapshot` WHERE `replay_id` = {}", replayId);
+
+        for (auto const& pair : match.actorAppearanceSnapshots)
+        {
+            ReplayActorAppearanceSnapshot const& snapshot = pair.second;
+            CharacterDatabase.Execute(
+                "INSERT INTO `character_arena_replay_actor_snapshot` "
+                "(`replay_id`, `actor_guid`, `winner_side`, `actor_name`, `player_class`, `race`, `gender`, `display_id`, `native_display_id`, `mainhand_display_id`, `offhand_display_id`, `ranged_display_id`) "
+                "VALUES ({}, {}, {}, '{}', {}, {}, {}, {}, {}, {}, {}, {})",
+                replayId,
+                snapshot.guid,
+                snapshot.winnerSide ? 1 : 0,
+                EscapeSqlString(snapshot.name),
+                uint32(snapshot.playerClass),
+                uint32(snapshot.race),
+                uint32(snapshot.gender),
+                snapshot.displayId,
+                snapshot.nativeDisplayId,
+                snapshot.mainhandDisplayId,
+                snapshot.offhandDisplayId,
+                snapshot.rangedDisplayId
+            );
+        }
+    }
+
+    static void LoadReplayActorAppearanceSnapshots(MatchRecord& record, uint32 replayId)
+    {
+        record.actorAppearanceSnapshots.clear();
+
+        if (!replayId)
+            return;
+
+        QueryResult result = CharacterDatabase.Query(
+            "SELECT `actor_guid`, `winner_side`, `actor_name`, `player_class`, `race`, `gender`, `display_id`, `native_display_id`, `mainhand_display_id`, `offhand_display_id`, `ranged_display_id` "
+            "FROM `character_arena_replay_actor_snapshot` WHERE `replay_id` = {}",
+            replayId);
+        if (!result)
+            return;
+
+        do
+        {
+            Field* fields = result->Fetch();
+            if (!fields)
+                continue;
+
+            ReplayActorAppearanceSnapshot snapshot;
+            snapshot.guid = fields[0].Get<uint64>();
+            snapshot.winnerSide = fields[1].Get<uint8>() != 0;
+            snapshot.name = fields[2].Get<std::string>();
+            snapshot.playerClass = fields[3].Get<uint8>();
+            snapshot.race = fields[4].Get<uint8>();
+            snapshot.gender = fields[5].Get<uint8>();
+            snapshot.displayId = fields[6].Get<uint32>();
+            snapshot.nativeDisplayId = fields[7].Get<uint32>();
+            snapshot.mainhandDisplayId = fields[8].Get<uint32>();
+            snapshot.offhandDisplayId = fields[9].Get<uint32>();
+            snapshot.rangedDisplayId = fields[10].Get<uint32>();
+            if (snapshot.guid)
+                record.actorAppearanceSnapshots[snapshot.guid] = std::move(snapshot);
+        }
+        while (result->NextRow());
+    }
+
+    static ReplayActorAppearanceSnapshot const* FindReplayActorAppearanceSnapshot(MatchRecord const& match, uint64 actorGuid)
+    {
+        auto it = match.actorAppearanceSnapshots.find(actorGuid);
+        if (it == match.actorAppearanceSnapshots.end())
+            return nullptr;
+        return &it->second;
+    }
+
+    static void ApplyReplayActorAppearanceToClone(Creature* clone, ReplayActorAppearanceSnapshot const* snapshot)
+    {
+        if (!clone || !snapshot)
+            return;
+
+        if (snapshot->nativeDisplayId)
+            clone->SetNativeDisplayId(snapshot->nativeDisplayId);
+
+        uint32 effectiveDisplayId = snapshot->displayId ? snapshot->displayId : snapshot->nativeDisplayId;
+        if (effectiveDisplayId)
+            clone->SetDisplayId(effectiveDisplayId);
+
+        clone->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + 0, snapshot->mainhandDisplayId);
+        clone->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + 1, snapshot->offhandDisplayId);
+        clone->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + 2, snapshot->rangedDisplayId);
+    }
+
     static Creature* FindReplayClone(Player* viewer, ActiveReplaySession const& session, uint64 actorGuid)
     {
         if (!viewer || !viewer->GetMap())
@@ -1027,12 +1191,12 @@ namespace
 
     static uint32 GetReplayCloneEntry()
     {
-        return sConfigMgr->GetOption<uint32>("ArenaReplay.CloneScene.CloneEntry", REPLAY_SURROGATE_CLONE_ENTRY);
+        return sConfigMgr->GetOption<uint32>("ArenaReplay.CloneScene.CloneEntry", 98501u);
     }
 
     static uint32 GetReplayCameraAnchorEntry()
     {
-        return sConfigMgr->GetOption<uint32>("ArenaReplay.CloneScene.CameraAnchorEntry", GetReplayCloneEntry());
+        return sConfigMgr->GetOption<uint32>("ArenaReplay.CloneScene.CameraAnchorEntry", 18793u);
     }
 
     static Creature* SummonReplaySceneUnit(Player* viewer, uint32 entry, float x, float y, float z, float o, bool hideNameplate = false)
@@ -1164,6 +1328,7 @@ namespace
             if (!clone)
                 continue;
 
+            ApplyReplayActorAppearanceToClone(clone, FindReplayActorAppearanceSnapshot(match, track.guid));
             session.cloneBindings.push_back({ track.guid, ref.winnerSide, clone->GetGUID() });
         }
 
@@ -1916,6 +2081,7 @@ public:
 
         MatchRecord& match = it->second;
         FinalizeActorSnapshots(bg, match, winnerTeamId);
+        CaptureReplayActorAppearanceSnapshots(bg, match, winnerTeamId);
 
         /** serialize arena replay data **/
         ArenaReplayByteBuffer buffer;
@@ -2034,6 +2200,8 @@ public:
         uint32 insertedReplayId = 0;
         if (insertedIdResult)
             insertedReplayId = insertedIdResult->Fetch()[0].Get<uint32>();
+
+        PersistReplayActorAppearanceSnapshots(insertedReplayId, match);
 
         for (Player* notifyPlayer : notifyPlayers)
             if (notifyPlayer)
@@ -2866,6 +3034,7 @@ private:
 
         MatchRecord record;
         deserializeMatchData(record, fields);
+        LoadReplayActorAppearanceSnapshots(record, matchId);
 
         if (record.packets.empty())
         {

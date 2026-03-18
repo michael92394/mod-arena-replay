@@ -422,7 +422,7 @@ ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 #
 #        Default:     91012
 #
-#        Example:     ArenaReplay.CloneScene.CloneEntry = 91012
+#        Example:     ArenaReplay.CloneScene.CloneEntry = 98501
 #                     Replay actor surrogates are spawned from creature 91012.
 #
 #    ArenaReplay.CloneScene.CameraAnchorEntry
@@ -434,7 +434,7 @@ ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 #
 #        Default:     91012
 #
-#        Example:     ArenaReplay.CloneScene.CameraAnchorEntry = 91012
+#        Example:     ArenaReplay.CloneScene.CameraAnchorEntry = 18793
 #                     The replay camera anchor uses creature 91012.
 #
 #    ArenaReplay.CloneScene.SyncMs
@@ -451,8 +451,8 @@ ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 #
 ArenaReplay.CloneScene.Enable = 1
 ArenaReplay.CloneScene.UseViewpoint = 1
-ArenaReplay.CloneScene.CloneEntry = 91012
-ArenaReplay.CloneScene.CameraAnchorEntry = 91012
+ArenaReplay.CloneScene.CloneEntry = 98501
+ArenaReplay.CloneScene.CameraAnchorEntry = 18793
 ArenaReplay.CloneScene.SyncMs = 50
 
 ########################################

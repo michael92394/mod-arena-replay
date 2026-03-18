@@ -168,3 +168,20 @@ This pass pushes ArenaReplay into a stricter four-layer replay architecture:
 
 ### Important limitation
 This is still a **surrogate clone scene** rather than the final full appearance-mirror system. Replay data still lacks a persistent equipment/appearance snapshot, so actor bodies are positional replay surrogates rather than perfect player replicas.
+
+
+## Replay clone-scene appearance snapshot layer
+
+The clone-scene replay path now uses three distinct persistence/runtime layers:
+
+- `ArenaReplay.CloneScene.CameraAnchorEntry` defaults to the invisible utility creature entry `18793`.
+- `ArenaReplay.CloneScene.CloneEntry` defaults to replay actor clone entry `98501`.
+- Per-actor appearance data is stored in `character_arena_replay_actor_snapshot` and applied to spawned replay clones at playback time.
+
+Current snapshot coverage is intentionally conservative and records:
+
+- actor GUID, class, race, gender, and name
+- display/native display ids
+- mainhand, offhand, and ranged item display ids
+
+This gives clone-scene playback a stable identity/weapon-visual bridge while preserving room for later expansion into full player-bytes / armor appearance capture.
