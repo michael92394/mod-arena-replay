@@ -195,3 +195,10 @@ New debug signatures emitted by this pass:
 - `[RTG][REPLAY][ATTACH_WAIT]`
 - `[RTG][REPLAY][ATTACH_OK]`
 - `[RTG][REPLAY][ATTACH_TIMEOUT]`
+
+
+## Replay sandbox mode (5.5.0)
+
+Replay playback no longer depends on joining a battleground instance. The replay viewer is now treated as a hidden spectator shell that teleports directly to the replay map, waits for confirmed map attach, then boots clone-scene playback and the camera anchor from a sandbox world-update driver.
+
+This removes the old failure mode where replay startup tried to reuse battleground lifecycle ownership and the client rejected the transfer with `Map cannot be entered at this time.`
