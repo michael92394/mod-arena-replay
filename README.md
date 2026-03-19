@@ -202,3 +202,9 @@ New debug signatures emitted by this pass:
 Replay playback no longer depends on joining a battleground instance. The replay viewer is now treated as a hidden spectator shell that teleports directly to the replay map, waits for confirmed map attach, then boots clone-scene playback and the camera anchor from a sandbox world-update driver.
 
 This removes the old failure mode where replay startup tried to reuse battleground lifecycle ownership and the client rejected the transfer with `Map cannot be entered at this time.`
+
+
+## 2026-03-19 — replay sandbox v2 / fresh arena shell
+- Replay sandbox startup no longer relies on naked `TeleportTo(mapId, ...)` for arena maps.
+- Arena replay now creates a fresh replay-owned arena instance shell and sends the viewer into that shell before clone-scene playback begins.
+- This change exists because arena maps require valid instance ownership even when replay playback is decoupled from the original battleground lifecycle.
