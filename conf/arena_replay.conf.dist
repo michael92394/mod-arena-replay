@@ -1280,14 +1280,30 @@ ArenaReplay.Return.SafeFallbackO = 3.69762
 #                     The viewer body is parked away from actor chase motion.
 #
 #    ArenaReplay.SpectatorShell.DisableGravity
-#        Description: Enables fly/hover/no-gravity state for the hidden viewer
-#                     shell during replay.
+#        Description: Enables hidden-body parking safeguards while replay is
+#                     active. The viewer body is already invisible and client
+#                     movement is locked; this key now only enables the parking
+#                     block and does not force fly/no-gravity unless the explicit
+#                     UseFlightForParking compatibility key is enabled.
 #
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
 #        Example:     ArenaReplay.SpectatorShell.DisableGravity = 1
-#                     The hidden viewer body does not fall during replay.
+#                     The hidden viewer body is parked without using flight flags.
+#
+#    ArenaReplay.SpectatorShell.UseFlightForParking
+#        Description: Compatibility option for branches that require fly/hover/
+#                     no-gravity to park the hidden viewer body. Leave this
+#                     disabled on RTG unless specifically debugging camera-shell
+#                     falling, because these movement flags can persist after
+#                     replay teardown on some cores.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+#        Example:     ArenaReplay.SpectatorShell.UseFlightForParking = 0
+#                     Avoids replay-created fly/no-gravity state on the viewer.
 #
 #    ArenaReplay.SpectatorShell.UseInvisibleDisplay
 #        Description: Applies an invisible display id to the hidden viewer body
@@ -1320,6 +1336,7 @@ ArenaReplay.Return.SafeFallbackO = 3.69762
 ArenaReplay.SpectatorShell.HideViewerBody = 1
 ArenaReplay.SpectatorShell.MoveBodyToHoldingPoint = 1
 ArenaReplay.SpectatorShell.DisableGravity = 1
+ArenaReplay.SpectatorShell.UseFlightForParking = 0
 ArenaReplay.SpectatorShell.UseInvisibleDisplay = 1
 ArenaReplay.SpectatorShell.InvisibleDisplayId = 11686
 ArenaReplay.SpectatorShell.RestoreOnExit = 1

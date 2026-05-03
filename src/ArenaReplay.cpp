@@ -1481,6 +1481,7 @@ namespace
         if (snapshot.rangedDisplayId) ++itemDisplayCount;
 
         auto existing = match.actorAppearanceSnapshots.find(snapshot.guid);
+        bool changed = existing == match.actorAppearanceSnapshots.end();
         if (existing != match.actorAppearanceSnapshots.end())
         {
             // Preserve an already-valid display if a late sample is somehow less useful.
@@ -1488,13 +1489,24 @@ namespace
                 snapshot.displayId = existing->second.displayId;
             if (!snapshot.nativeDisplayId && existing->second.nativeDisplayId)
                 snapshot.nativeDisplayId = existing->second.nativeDisplayId;
+
+            ReplayActorAppearanceSnapshot const& prior = existing->second;
+            changed = prior.playerClass != snapshot.playerClass ||
+                prior.race != snapshot.race ||
+                prior.gender != snapshot.gender ||
+                prior.displayId != snapshot.displayId ||
+                prior.nativeDisplayId != snapshot.nativeDisplayId ||
+                prior.mainhandDisplayId != snapshot.mainhandDisplayId ||
+                prior.offhandDisplayId != snapshot.offhandDisplayId ||
+                prior.rangedDisplayId != snapshot.rangedDisplayId;
         }
 
         match.actorAppearanceSnapshots[snapshot.guid] = snapshot;
 
-        if (sConfigMgr->GetOption<bool>("ArenaReplay.CloneScene.AppearanceDebug", true))
+        bool const isSample = source && std::string(source) == "sample";
+        if (sConfigMgr->GetOption<bool>("ArenaReplay.CloneScene.AppearanceDebug", true) && (!isSample || changed))
         {
-            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_CAPTURE] replayInstance={} actorGuid={} name={} race={} class={} gender={} displayId={} nativeDisplayId={} itemDisplayCount={} source={} result=ok",
+            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_CAPTURE] replayInstance={} actorGuid={} name={} race={} class={} gender={} displayId={} nativeDisplayId={} itemDisplayCount={} source={} changed={} result=ok",
                 bg->GetInstanceID(),
                 snapshot.guid,
                 snapshot.name,
@@ -1504,7 +1516,8 @@ namespace
                 snapshot.displayId,
                 snapshot.nativeDisplayId,
                 itemDisplayCount,
-                source ? source : "unknown");
+                source ? source : "unknown",
+                changed ? 1 : 0);
         }
     }
 
@@ -4181,9 +4194,16 @@ namespace
 
         if (sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorShell.DisableGravity", true))
         {
-            player->SetCanFly(true);
-            player->SetDisableGravity(true);
-            player->SetHover(true);
+            // Historical builds used fly/no-gravity/hover to park the hidden viewer body.
+            // On some branches those movement flags survive teardown. Keep the body hidden
+            // and locked, but only apply flight-style parking when explicitly requested.
+            if (sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorShell.UseFlightForParking", false))
+            {
+                player->SetCanFly(true);
+                player->SetDisableGravity(true);
+                player->SetHover(true);
+            }
+
             player->StopMoving();
         }
 
@@ -5685,11 +5705,26 @@ private:
         deserializeMatchData(record, fields);
         LoadReplayActorAppearanceSnapshots(record, matchId);
 
-        if (record.packets.empty())
+        const bool hasPlayableActorTracks = !BuildPlayableReplayActorSelections(record).empty();
+        if (record.packets.empty() && !hasPlayableActorTracks)
         {
             ChatHandler(p->GetSession()).PSendSysMessage("Replay data is incomplete or unsafe for playback.");
             CloseGossipMenuFor(p);
+            LOG_WARN("server.loading", "[RTG][REPLAY][LOAD_FAIL] replay={} reason=no_packets_or_actor_tracks winnerTracks={} loserTracks={} snapshots={}",
+                matchId,
+                record.winnerActorTracks.size(),
+                record.loserActorTracks.size(),
+                record.actorAppearanceSnapshots.size());
             return false;
+        }
+
+        if (record.packets.empty() && hasPlayableActorTracks)
+        {
+            LOG_INFO("server.loading", "[RTG][REPLAY][LOAD_COMPAT] replay={} mode=clone_only_no_packets winnerTracks={} loserTracks={} snapshots={} result=ok",
+                matchId,
+                record.winnerActorTracks.size(),
+                record.loserActorTracks.size(),
+                record.actorAppearanceSnapshots.size());
         }
 
         loadedReplays[p->GetGUID().GetCounter()] = std::move(record);
