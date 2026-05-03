@@ -456,6 +456,282 @@ ArenaReplay.CloneScene.CameraAnchorEntry = 18793
 ArenaReplay.CloneScene.SyncMs = 50
 
 ########################################
+# ArenaReplay Copied Replay Maps
+########################################
+#
+#    ArenaReplay.ReplayMap.Nagrand
+#        Description: Copied non-battleground map id used when replaying
+#                     matches recorded on native Nagrand Arena map 559.
+#
+#                     The copied map must contain the arena terrain. Replay
+#                     playback keeps actor coordinates unchanged and teleports
+#                     the viewer to this copied map instead of entering a live
+#                     battleground instance.
+#
+#        Default:     725
+#                     0 - Not configured
+#
+#        Example:     ArenaReplay.ReplayMap.Nagrand = 725
+#                     Replays recorded on map 559 play back on copied map 725.
+#
+#    ArenaReplay.ReplayMap.BladesEdge
+#        Description: Copied non-battleground map id used when replaying
+#                     matches recorded on native Blade's Edge Arena map 562.
+#
+#        Default:     726
+#                     0 - Not configured
+#
+#        Example:     ArenaReplay.ReplayMap.BladesEdge = 726
+#                     Replays recorded on map 562 play back on copied map 726.
+#
+#    ArenaReplay.ReplayMap.RuinsOfLordaeron
+#        Description: Copied non-battleground map id used when replaying
+#                     matches recorded on native Ruins of Lordaeron map 572.
+#
+#        Default:     727
+#                     0 - Not configured
+#
+#        Example:     ArenaReplay.ReplayMap.RuinsOfLordaeron = 727
+#                     Replays recorded on map 572 play back on copied map 727.
+#
+#    ArenaReplay.ReplayMap.DalaranSewers
+#        Description: Copied non-battleground map id used when replaying
+#                     matches recorded on native Dalaran Sewers map 617.
+#
+#        Default:     728
+#                     0 - Not configured
+#
+#        Example:     ArenaReplay.ReplayMap.DalaranSewers = 728
+#                     Replays recorded on map 617 play back on copied map 728.
+#
+#    ArenaReplay.ReplayMap.RingOfValor
+#        Description: Copied non-battleground map id used when replaying
+#                     matches recorded on native Ring of Valor map 618.
+#
+#        Default:     729
+#                     0 - Not configured
+#
+#        Example:     ArenaReplay.ReplayMap.RingOfValor = 729
+#                     Replays recorded on map 618 play back on copied map 729.
+#
+#    ArenaReplay.ReplayMap.RequireResolved
+#        Description: Requires native arena maps to resolve to a copied replay
+#                     map before playback can start.
+#
+#                     Keep this enabled for production. If disabled, unresolved
+#                     maps may fall back to their native map id for local
+#                     testing only.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ReplayMap.RequireResolved = 1
+#                     Rejects replay start when the copied map is not configured.
+#
+ArenaReplay.ReplayMap.Nagrand = 725
+ArenaReplay.ReplayMap.BladesEdge = 726
+ArenaReplay.ReplayMap.RuinsOfLordaeron = 727
+ArenaReplay.ReplayMap.DalaranSewers = 728
+ArenaReplay.ReplayMap.RingOfValor = 729
+ArenaReplay.ReplayMap.RequireResolved = 1
+
+########################################
+# ArenaReplay Dynamic Arena Objects
+########################################
+#
+#    ArenaReplay.DynamicObjects.Enable
+#        Description: Enables session-owned replay spawning for arena objects
+#                     that normally belong to battleground scripts, such as
+#                     gates, buffs, Dalaran Sewers water, and Ring of Valor
+#                     machinery.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.DynamicObjects.Enable = 1
+#                     Replay playback spawns arena objects in the viewer's
+#                     copied map and private phase.
+#
+#    ArenaReplay.DynamicObjects.Debug
+#        Description: Enables dynamic object lifecycle and timeline logging.
+#
+#                     Logs include map resolution, object spawn, object state,
+#                     object timeline, and cleanup events.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.DynamicObjects.Debug = 1
+#                     Writes dynamic object diagnostics during replay playback.
+#
+#    ArenaReplay.DynamicObjects.SpawnBeforeClones
+#        Description: Keeps dynamic arena object spawning on the replay attach
+#                     barrier before replay actor clones are created.
+#
+#                     Leave this enabled. Clones should not be spawned before
+#                     gates and arena machinery exist in the copied replay map.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.DynamicObjects.SpawnBeforeClones = 1
+#                     Dynamic objects are prepared before replay clone scene
+#                     creation.
+#
+#    ArenaReplay.DynamicObjects.GateOpenDelayMs
+#        Description: Replay time, in milliseconds, before opening spawned
+#                     arena gates.
+#
+#                     Actor tracks are currently captured from active match
+#                     state, so the default opens gates immediately before
+#                     clones spawn. Nonzero values are reserved for future
+#                     pre-start replay capture.
+#
+#        Default:     0
+#
+#        Example:     ArenaReplay.DynamicObjects.GateOpenDelayMs = 0
+#                     Gates open immediately at replay time 0.
+#
+#    ArenaReplay.DynamicObjects.BuffDelaySeconds
+#        Description: Replay time, in seconds, before spawned buff crystals
+#                     switch to their active state.
+#
+#        Default:     90
+#
+#        Example:     ArenaReplay.DynamicObjects.BuffDelaySeconds = 90
+#                     Buff crystals activate at 90 seconds of replay time.
+#
+#    ArenaReplay.DynamicObjects.DalaranWaterfall.Enable
+#        Description: Enables Dalaran Sewers waterfall visual and collision
+#                     object playback on copied replay maps.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.DynamicObjects.DalaranWaterfall.Enable = 1
+#                     Waterfall objects are spawned and timed during Dalaran
+#                     Sewers replay playback.
+#
+#    ArenaReplay.DynamicObjects.DalaranWaterfall.FirstDelaySeconds
+#        Description: Replay time, in seconds, before the first Dalaran Sewers
+#                     waterfall warning begins.
+#
+#        Default:     45
+#
+#        Example:     ArenaReplay.DynamicObjects.DalaranWaterfall.FirstDelaySeconds = 45
+#                     The first waterfall warning starts at 45 seconds.
+#
+#    ArenaReplay.DynamicObjects.DalaranWaterfall.WarningSeconds
+#        Description: Duration, in seconds, of the Dalaran Sewers waterfall
+#                     warning state before collision becomes active.
+#
+#        Default:     5
+#
+#        Example:     ArenaReplay.DynamicObjects.DalaranWaterfall.WarningSeconds = 5
+#                     The visual warning runs for 5 seconds.
+#
+#    ArenaReplay.DynamicObjects.DalaranWaterfall.DurationSeconds
+#        Description: Duration, in seconds, of the active Dalaran Sewers
+#                     waterfall state.
+#
+#        Default:     30
+#
+#        Example:     ArenaReplay.DynamicObjects.DalaranWaterfall.DurationSeconds = 30
+#                     The active waterfall lasts 30 seconds.
+#
+#    ArenaReplay.DynamicObjects.DalaranWaterfall.CollisionRequired
+#        Description: Controls whether failure to spawn the Dalaran Sewers
+#                     waterfall collision object aborts replay startup.
+#
+#                     Leave disabled if collision creates camera or viewer
+#                     problems; the visual object can still be used without
+#                     blocking replay playback.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+#        Example:     ArenaReplay.DynamicObjects.DalaranWaterfall.CollisionRequired = 0
+#                     Missing collision is logged but does not abort replay.
+#
+#    ArenaReplay.DynamicObjects.RingOfValor.Enable
+#        Description: Enables Ring of Valor dynamic elevator, fire, gear,
+#                     pulley, pillar, and buff playback on copied replay maps.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.DynamicObjects.RingOfValor.Enable = 1
+#                     Ring of Valor replays spawn and drive official arena
+#                     machinery as session-owned objects.
+#
+#    ArenaReplay.DynamicObjects.RingOfValor.DeriveInitialStateFromFirstActorZ
+#        Description: Derives Ring of Valor initial elevator state from the
+#                     first playable actor frame.
+#
+#                     If the first actor Z is already on the upper floor, replay
+#                     startup initializes Ring objects in the post-elevator
+#                     state so clones are not visually trapped by low geometry.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.DynamicObjects.RingOfValor.DeriveInitialStateFromFirstActorZ = 1
+#                     Uses actor Z to select the safest initial Ring state.
+#
+#    ArenaReplay.DynamicObjects.RingOfValor.FirstTimerMs
+#        Description: Replay time, in milliseconds, before Ring of Valor fire
+#                     and fire-door objects open.
+#
+#        Default:     20500
+#
+#        Example:     ArenaReplay.DynamicObjects.RingOfValor.FirstTimerMs = 20500
+#                     Fire opens at 20.5 seconds.
+#
+#    ArenaReplay.DynamicObjects.RingOfValor.CloseFireMs
+#        Description: Milliseconds after fire opening before Ring of Valor fire
+#                     and fire-door objects close again.
+#
+#        Default:     5000
+#
+#        Example:     ArenaReplay.DynamicObjects.RingOfValor.CloseFireMs = 5000
+#                     Fire closes 5 seconds after opening.
+#
+#    ArenaReplay.DynamicObjects.RingOfValor.FireToPillarMs
+#        Description: Milliseconds after fire closes before Ring of Valor pillar
+#                     switching begins.
+#
+#        Default:     20000
+#
+#        Example:     ArenaReplay.DynamicObjects.RingOfValor.FireToPillarMs = 20000
+#                     Pillar switching begins 20 seconds after fire closes.
+#
+#    ArenaReplay.DynamicObjects.RingOfValor.PillarSwitchMs
+#        Description: Interval, in milliseconds, between Ring of Valor pillar,
+#                     gear, and pulley toggle states after switching begins.
+#
+#        Default:     25000
+#
+#        Example:     ArenaReplay.DynamicObjects.RingOfValor.PillarSwitchMs = 25000
+#                     Ring pillars toggle every 25 seconds.
+#
+ArenaReplay.DynamicObjects.Enable = 1
+ArenaReplay.DynamicObjects.Debug = 1
+ArenaReplay.DynamicObjects.SpawnBeforeClones = 1
+ArenaReplay.DynamicObjects.GateOpenDelayMs = 0
+ArenaReplay.DynamicObjects.BuffDelaySeconds = 90
+ArenaReplay.DynamicObjects.DalaranWaterfall.Enable = 1
+ArenaReplay.DynamicObjects.DalaranWaterfall.FirstDelaySeconds = 45
+ArenaReplay.DynamicObjects.DalaranWaterfall.WarningSeconds = 5
+ArenaReplay.DynamicObjects.DalaranWaterfall.DurationSeconds = 30
+ArenaReplay.DynamicObjects.DalaranWaterfall.CollisionRequired = 0
+ArenaReplay.DynamicObjects.RingOfValor.Enable = 1
+ArenaReplay.DynamicObjects.RingOfValor.DeriveInitialStateFromFirstActorZ = 1
+ArenaReplay.DynamicObjects.RingOfValor.FirstTimerMs = 20500
+ArenaReplay.DynamicObjects.RingOfValor.CloseFireMs = 5000
+ArenaReplay.DynamicObjects.RingOfValor.FireToPillarMs = 20000
+ArenaReplay.DynamicObjects.RingOfValor.PillarSwitchMs = 25000
+
+########################################
 # ArenaReplay Private Replay Sandbox
 ########################################
 #
