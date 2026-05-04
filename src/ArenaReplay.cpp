@@ -1877,7 +1877,7 @@ namespace
                 itemEntryCount,
                 source ? source : "unknown",
                 changed ? 1 : 0);
-            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replayInstance={} actorGuid={} name={} displayId={} nativeDisplayId={} result=creature_silhouette_mode reason=creature_clone_cannot_show_full_player_armor",
+            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replayInstance={} actorGuid={} name={} displayId={} nativeDisplayId={} result=creature_silhouette_debug reason=creature_clone_cannot_show_full_player_armor",
                 bg->GetInstanceID(),
                 snapshot.guid,
                 snapshot.name,
@@ -2280,7 +2280,7 @@ namespace
 
         if (snapshot)
         {
-            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replay={} actorGuid={} actorName={} displayId={} nativeDisplayId={} result=creature_silhouette_mode reason=creature_clone_cannot_show_full_player_armor",
+            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replay={} actorGuid={} actorName={} displayId={} nativeDisplayId={} result=creature_silhouette_debug reason=creature_clone_cannot_show_full_player_armor",
                 session.replayId,
                 track.guid,
                 track.name,
@@ -2523,7 +2523,7 @@ namespace
         switch (backend)
         {
             case RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE:
-                return "creature_silhouette";
+                return "creature_silhouette_debug";
             case RTG_REPLAY_ACTOR_VISUAL_PLAYERBOT_BODY_EXPERIMENTAL:
                 return "playerbot_body_experimental";
             case RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL:
@@ -2546,6 +2546,8 @@ namespace
 
         bool backendAvailable = false;
         bool playerBodyEnabled = ReplayPlayerBodyBackendEnabled();
+        bool useCapturedEquipment = sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.PlayerBody.UseCapturedEquipment", true);
+        bool useCapturedCustomization = sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization", true);
         std::string accountPrefix = sConfigMgr->GetOption<std::string>("ArenaReplay.ActorVisual.PlayerBody.AccountPrefix", "rtgreplay");
         uint32 bodyLevel = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.PlayerBody.Level", 19u);
         uint32 planned = 0;
@@ -2560,7 +2562,7 @@ namespace
             ReplayActorAppearanceSnapshot const* snapshot = FindReplayActorAppearanceSnapshot(match, track.guid);
             uint32 equipmentCount = snapshot ? CountReplaySnapshotEquipmentEntries(*snapshot) : 0;
 
-            LOG_INFO("server.loading", "[RTG][REPLAY][PLAYER_BODY_PLAN] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} actorGuid={} name={} race={} gender={} class={} equipmentCount={} backend={} playerBodyEnable={} accountPrefix={} level={} backendAvailable={} result=planned_only",
+            LOG_INFO("server.loading", "[RTG][REPLAY][PLAYER_BODY_PLAN] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} actorGuid={} actorName={} race={} class={} gender={} skin={} face={} hairStyle={} hairColor={} facialHair={} playerBytes={} playerBytes2={} playerFlags={} shapeshiftDisplayId={} shapeshiftForm={} equipmentCount={} headEntry={} shouldersEntry={} chestEntry={} waistEntry={} legsEntry={} feetEntry={} wristsEntry={} handsEntry={} backEntry={} tabardEntry={} mainhandEntry={} offhandEntry={} rangedEntry={} backend={} playerBodyEnable={} useCapturedEquipment={} useCapturedCustomization={} accountPrefix={} level={} backendAvailable={} result=planned_only",
                 session.replayId,
                 viewer ? viewer->GetGUID().GetCounter() : 0,
                 session.nativeMapId,
@@ -2569,11 +2571,36 @@ namespace
                 track.guid,
                 track.name,
                 snapshot ? uint32(snapshot->race) : uint32(track.race),
-                snapshot ? uint32(snapshot->gender) : uint32(track.gender),
                 snapshot ? uint32(snapshot->playerClass) : uint32(track.playerClass),
+                snapshot ? uint32(snapshot->gender) : uint32(track.gender),
+                snapshot ? uint32(snapshot->skin) : 0,
+                snapshot ? uint32(snapshot->face) : 0,
+                snapshot ? uint32(snapshot->hairStyle) : 0,
+                snapshot ? uint32(snapshot->hairColor) : 0,
+                snapshot ? uint32(snapshot->facialHair) : 0,
+                snapshot ? snapshot->playerBytes : 0,
+                snapshot ? snapshot->playerBytes2 : 0,
+                snapshot ? snapshot->playerFlags : 0,
+                snapshot ? snapshot->shapeshiftDisplayId : 0,
+                snapshot ? snapshot->shapeshiftForm : 0,
                 equipmentCount,
+                snapshot ? snapshot->headItemEntry : 0,
+                snapshot ? snapshot->shouldersItemEntry : 0,
+                snapshot ? snapshot->chestItemEntry : 0,
+                snapshot ? snapshot->waistItemEntry : 0,
+                snapshot ? snapshot->legsItemEntry : 0,
+                snapshot ? snapshot->feetItemEntry : 0,
+                snapshot ? snapshot->wristsItemEntry : 0,
+                snapshot ? snapshot->handsItemEntry : 0,
+                snapshot ? snapshot->backItemEntry : 0,
+                snapshot ? snapshot->tabardItemEntry : 0,
+                snapshot ? snapshot->mainhandItemEntry : 0,
+                snapshot ? snapshot->offhandItemEntry : 0,
+                snapshot ? snapshot->rangedItemEntry : 0,
                 GetReplayActorVisualBackendName(backend),
                 playerBodyEnabled ? 1 : 0,
+                useCapturedEquipment ? 1 : 0,
+                useCapturedCustomization ? 1 : 0,
                 accountPrefix,
                 bodyLevel,
                 backendAvailable ? 1 : 0);
@@ -3414,7 +3441,7 @@ namespace
             session.replayMapId,
             session.replayPhaseMask,
             GetReplayActorVisualBackendName(visualBackend),
-            visualBackend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE ? "creature_silhouette_mode" : "experimental_planned_only");
+            visualBackend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE ? "creature_silhouette_debug" : "experimental_planned_only");
         LogReplayPlayerBodyPlan(viewer, match, session);
 
         uint32 prewarmTeam0 = 0;

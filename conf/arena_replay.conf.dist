@@ -600,12 +600,13 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #    ArenaReplay.ActorVisual.Backend
 #        Description: Selects the actor visual backend used for replay bodies.
 #
-#                     Backend 0 is the stable creature silhouette backend. It
-#                     shows race/gender/class body silhouettes, shapeshift/base
-#                     display ids, correct weapon item entries, movement, and
-#                     POV targeting. It cannot show full player armor or exact
-#                     player customization because a creature is not a player
-#                     visual container.
+#                     Backend 0 is the stable creature silhouette debug
+#                     backend. It shows rough actor positions, optional textured
+#                     NPC fallback shells, weapon item entries, and POV
+#                     targeting for testing replay timing, maps, objects, and
+#                     cameras. It cannot show full player armor, exact player
+#                     customization, or faithful player combat animation because
+#                     a creature is not a player visual container.
 #
 #                     Backend 1 is a planning-only placeholder for future
 #                     playerbot-backed replay bodies. The module logs the
@@ -614,12 +615,12 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #                     Backend 2 is reserved for a future synthetic player object
 #                     backend and currently falls back to backend 0.
 #
-#        Default:     0 - creature_silhouette
+#        Default:     0 - creature_silhouette_debug
 #                     1 - playerbot_body_experimental
 #                     2 - synthetic_player_object_experimental
 #
 #        Example:     ArenaReplay.ActorVisual.Backend = 0
-#                     Uses stable creature silhouette replay bodies.
+#                     Uses debug creature silhouette replay bodies.
 #
 #    ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds
 #        Description: Controls whether creature silhouette actors apply raw
@@ -741,6 +742,32 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.PlayerBody.LogoutOnCleanup = 1
 #                     Future replay bodies are removed at replay end.
 #
+#    ArenaReplay.ActorVisual.PlayerBody.UseCapturedEquipment
+#        Description: Future backend option requesting replay-body playerbots be
+#                     equipped from captured snapshot item entries.
+#
+#                     This is logged in PLAYER_BODY_PLAN today and becomes an
+#                     execution switch when the player-body backend is wired.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.UseCapturedEquipment = 1
+#                     Future replay bodies use captured gear entries.
+#
+#    ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization
+#        Description: Future backend option requesting replay-body playerbots
+#                     use captured race/gender/customization bytes.
+#
+#                     This is logged in PLAYER_BODY_PLAN today and becomes an
+#                     execution switch when the player-body backend is wired.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
+#                     Future replay bodies use captured customization.
+#
 ArenaReplay.ActorVisual.Backend = 0
 ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds = 0
 ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays = 1
@@ -752,6 +779,8 @@ ArenaReplay.ActorVisual.PlayerBody.DisableAI = 1
 ArenaReplay.ActorVisual.PlayerBody.HideFromWho = 1
 ArenaReplay.ActorVisual.PlayerBody.NonInteractive = 1
 ArenaReplay.ActorVisual.PlayerBody.LogoutOnCleanup = 1
+ArenaReplay.ActorVisual.PlayerBody.UseCapturedEquipment = 1
+ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 
 
 ########################################
