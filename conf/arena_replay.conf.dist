@@ -344,7 +344,7 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     Higher values rotate the camera faster toward the tracked
 #                     actor orientation. Lower values are smoother but looser.
 #
-#        Default:     0.45
+#        Default:     0.35
 #                     0.05 - Very soft rotation
 #                     1.00 - Immediate facing correction
 #
@@ -372,8 +372,8 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #
 #        Default:     0.45
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct = 0.45
-#                     Uses moderate horizontal smoothing.
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct = 0.35
+#                     Uses steady horizontal smoothing.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct
 #        Description: Fraction of vertical camera distance closed on each
@@ -381,10 +381,10 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #
 #                     Keep lower than XY smoothing to reduce up/down bobbing.
 #
-#        Default:     0.18
+#        Default:     0.08
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct = 0.18
-#                     Uses gentle vertical smoothing.
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct = 0.08
+#                     Uses heavy vertical smoothing.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband
 #        Description: Vertical delta, in yards, ignored by camera smoothing.
@@ -392,10 +392,10 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     Small raw Z changes below this value do not move the
 #                     camera anchor.
 #
-#        Default:     0.30
+#        Default:     0.75
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband = 0.30
-#                     Ignores small vertical noise.
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband = 0.75
+#                     Ignores moderate vertical noise.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance
 #        Description: Vertical delta, in yards, that forces the smoothed camera
@@ -404,9 +404,9 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     This prevents smoothing from dragging through large,
 #                     legitimate height transitions such as Ring of Valor lifts.
 #
-#        Default:     4.0
+#        Default:     6.0
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance = 4.0
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance = 6.0
 #                     Snaps large vertical movement immediately.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs
@@ -415,9 +415,9 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     Large snaps, actor changes, and forced camera application
 #                     can still move immediately.
 #
-#        Default:     50
+#        Default:     100
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs = 50
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs = 100
 #                     Avoids tiny per-tick camera teleports.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.UseClonePosition
@@ -437,18 +437,18 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #        Description: Minimum horizontal distance, in yards, before a small
 #                     smoothed camera target moves the anchor.
 #
-#        Default:     0.10
+#        Default:     0.25
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance = 0.10
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance = 0.25
 #                     Skips imperceptibly small horizontal anchor moves.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance
 #        Description: Minimum vertical distance, in yards, before a small
 #                     smoothed camera target moves the anchor.
 #
-#        Default:     0.20
+#        Default:     0.50
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.20
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.50
 #                     Skips imperceptibly small vertical anchor moves.
 #
 #    ArenaReplay.Playback.PacketBudgetPerUpdate
@@ -574,14 +574,14 @@ ArenaReplay.ActorSpectate.FollowHeight = 1.75
 ArenaReplay.ActorSpectate.SnapDistance = 1.10
 ArenaReplay.ActorSpectate.OrientationLerpPct = 0.45
 ArenaReplay.ActorSpectate.CameraSmoothing.Enable = 1
-ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct = 0.45
-ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct = 0.18
-ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband = 0.30
-ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance = 4.0
-ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs = 50
+ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct = 0.35
+ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct = 0.08
+ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband = 0.75
+ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance = 6.0
+ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs = 100
 ArenaReplay.ActorSpectate.CameraSmoothing.UseClonePosition = 1
-ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance = 0.10
-ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.20
+ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance = 0.25
+ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.50
 ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 ArenaReplay.Playback.Mode = 1
 ArenaReplay.Playback.CloneMode.Enable = 1
@@ -592,6 +592,115 @@ ArenaReplay.Playback.CloneMode.StartAtFirstActorFrame = 1
 ArenaReplay.Playback.CloneMode.TrimPreMatchDeadAir = 1
 ArenaReplay.Playback.CloneMode.PrewarmClonesAtFirstFrame = 1
 ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
+
+########################################
+# ArenaReplay Actor Visual Backend
+########################################
+#
+#    ArenaReplay.ActorVisual.Backend
+#        Description: Selects the actor visual backend used for replay bodies.
+#
+#                     Backend 0 is the stable creature silhouette backend. It
+#                     shows race/gender/class body silhouettes, shapeshift/base
+#                     display ids, correct weapon item entries, movement, and
+#                     POV targeting. It cannot show full player armor or exact
+#                     player customization because a creature is not a player
+#                     visual container.
+#
+#                     Backend 1 is a planning-only placeholder for future
+#                     playerbot-backed replay bodies. The module logs the
+#                     player-body plan and currently falls back to backend 0.
+#
+#                     Backend 2 is reserved for a future synthetic player object
+#                     backend and currently falls back to backend 0.
+#
+#        Default:     0 - creature_silhouette
+#                     1 - playerbot_body_experimental
+#                     2 - synthetic_player_object_experimental
+#
+#        Example:     ArenaReplay.ActorVisual.Backend = 0
+#                     Uses stable creature silhouette replay bodies.
+#
+#    ArenaReplay.ActorVisual.PlayerBody.Enable
+#        Description: Enables the experimental player-body acquisition path.
+#
+#                     This pass does not spawn real playerbots yet. When backend
+#                     1 is selected, the module logs PLAYER_BODY_PLAN entries
+#                     with captured equipment/customization data and then falls
+#                     back to creature silhouette mode.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled for future backend work
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.Enable = 0
+#                     Keeps backend 1 in planned-only diagnostic mode.
+#
+#    ArenaReplay.ActorVisual.PlayerBody.AccountPrefix
+#        Description: Account/character prefix reserved for future temporary
+#                     replay-body playerbot actors.
+#
+#        Default:     rtgreplay
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.AccountPrefix = rtgreplay
+#                     Future replay body accounts use the rtgreplay prefix.
+#
+#    ArenaReplay.ActorVisual.PlayerBody.Level
+#        Description: Level intended for future replay-body playerbot actors.
+#
+#        Default:     19
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.Level = 19
+#                     Future replay bodies are prepared at level 19.
+#
+#    ArenaReplay.ActorVisual.PlayerBody.DisableAI
+#        Description: Future backend option requiring replay-body playerbots to
+#                     be frame-driven only, with playerbot AI disabled.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.DisableAI = 1
+#                     Future replay bodies do not run independent AI.
+#
+#    ArenaReplay.ActorVisual.PlayerBody.HideFromWho
+#        Description: Future backend option requesting replay bodies be hidden
+#                     from who-list style social surfaces where supported.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.HideFromWho = 1
+#                     Future replay bodies stay out of who-list results.
+#
+#    ArenaReplay.ActorVisual.PlayerBody.NonInteractive
+#        Description: Future backend option requesting replay bodies be
+#                     noninteractive, noncombat, and nonselectable where
+#                     supported by the playerbot/player-object implementation.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.NonInteractive = 1
+#                     Future replay bodies cannot be interacted with normally.
+#
+#    ArenaReplay.ActorVisual.PlayerBody.LogoutOnCleanup
+#        Description: Future backend option requesting replay-body playerbots be
+#                     logged out or released during replay cleanup.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorVisual.PlayerBody.LogoutOnCleanup = 1
+#                     Future replay bodies are removed at replay end.
+#
+ArenaReplay.ActorVisual.Backend = 0
+ArenaReplay.ActorVisual.PlayerBody.Enable = 0
+ArenaReplay.ActorVisual.PlayerBody.AccountPrefix = rtgreplay
+ArenaReplay.ActorVisual.PlayerBody.Level = 19
+ArenaReplay.ActorVisual.PlayerBody.DisableAI = 1
+ArenaReplay.ActorVisual.PlayerBody.HideFromWho = 1
+ArenaReplay.ActorVisual.PlayerBody.NonInteractive = 1
+ArenaReplay.ActorVisual.PlayerBody.LogoutOnCleanup = 1
 
 
 ########################################

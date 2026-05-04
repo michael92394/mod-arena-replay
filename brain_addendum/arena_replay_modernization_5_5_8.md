@@ -1,27 +1,18 @@
 # Arena Replay Modernization 5.5.8
 
-## Chapter 5.5.8 — Clone-only replay load and spectator-shell restore safety
+## Real appearance backend foundation
 
-Date: 2026-05-03
-Subsystem: mod-arena-replay copied-instance clone playback
+- Creature clone playback is now explicitly treated as `creature_silhouette` mode. It is the stable fallback for copied-instance replay bodies, but it cannot show full player armor/customization because a creature unit is not a player visual container.
+- Added `ArenaReplay.ActorVisual.Backend`:
+  - `0 = creature_silhouette`
+  - `1 = playerbot_body_experimental`
+  - `2 = synthetic_player_object_experimental`
+- Backend 1 is planning-only in this pass. It logs `PLAYER_BODY_PLAN` for every playable actor and falls back to creature silhouettes. This keeps replay watchable while validating the full data needed by future playerbot replay bodies.
+- Actor appearance snapshots now capture packed player customization bytes, player flags, shapeshift display/form diagnostics, and visible equipment item entries for head, shoulders, chest, waist, legs, feet, wrists, hands, back, tabard, mainhand, offhand, and ranged.
+- Inline snapshot encoding was extended additively. Older inline snapshots still load.
+- Actor snapshot SQL now has optional full-appearance columns. Runtime checks gate SELECT/INSERT shape so older schemas can still load until the SQL update has run.
+- Camera smoothing defaults were tightened for vertical stability: softer Z lerp, larger Z deadband, larger Z snap distance, and slower/sparser anchor moves.
 
-### Context
-Recent RTG replay tests showed appearance capture now fires during live arena join/sample, but newly recorded clone-mode replays could still be rejected with “Replay data is incomplete or unsafe for playback.” The same test pass also showed replay spectator shell flight/no-gravity flags could survive teardown on the RTG branch.
+## Future backend work
 
-### Findings
-- Clone-only copied-instance replays may legitimately have no raw packet payload while still containing valid actor tracks and appearance snapshots.
-- Treating `record.packets.empty()` as a hard playback failure blocks clone-only replay rows even when actor-track data is valid.
-- The hidden viewer body no longer needs fly/no-gravity/hover for normal copied-instance clone playback because the camera anchor drives the view and the body is invisible/parked.
-- Repeated appearance sample logging was too noisy; appearance capture should still update every sample, but only log sample captures when the snapshot changes.
-
-### Changes
-- Allows packet-empty replay rows to load when playable actor tracks exist.
-- Keeps the unsafe replay rejection only for rows with no raw packets and no usable actor tracks.
-- Adds `[RTG][REPLAY][LOAD_COMPAT]` for clone-only/no-packet replay loading.
-- Adds `[RTG][REPLAY][LOAD_FAIL]` diagnostics for truly unsafe rows.
-- Adds `ArenaReplay.SpectatorShell.UseFlightForParking = 0` as the explicit compatibility switch for fly/no-gravity parking.
-- Stops applying fly/no-gravity/hover to the hidden viewer body unless `UseFlightForParking` is enabled.
-- Throttles sample appearance-capture logs by logging sample captures only when actor appearance data changes.
-
-### Status
-Ready for a fresh arena replay test. Expected behavior: fresh clone-only replays with valid actor tracks no longer show “Replay data is incomplete or unsafe for playback,” and new replay exits should no longer create replay-induced floating unless `UseFlightForParking` is explicitly enabled.
+The next real visual fidelity step is to acquire temporary replay-body player objects, most likely through mod-playerbots or reserved replay accounts. Those bodies should be dressed from the captured item entries, customized from captured player bytes, moved strictly by actor frames, kept out of BattlegroundMgr/group/queue state, and released on cleanup.

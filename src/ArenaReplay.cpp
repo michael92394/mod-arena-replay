@@ -142,6 +142,26 @@ struct ReplayActorAppearanceSnapshot
     uint32 mainhandItemEntry = 0;
     uint32 offhandItemEntry = 0;
     uint32 rangedItemEntry = 0;
+    uint8 skin = 0;
+    uint8 face = 0;
+    uint8 hairStyle = 0;
+    uint8 hairColor = 0;
+    uint8 facialHair = 0;
+    uint32 playerBytes = 0;
+    uint32 playerBytes2 = 0;
+    uint32 playerFlags = 0;
+    uint32 shapeshiftDisplayId = 0;
+    uint32 shapeshiftForm = 0;
+    uint32 headItemEntry = 0;
+    uint32 shouldersItemEntry = 0;
+    uint32 chestItemEntry = 0;
+    uint32 waistItemEntry = 0;
+    uint32 legsItemEntry = 0;
+    uint32 feetItemEntry = 0;
+    uint32 wristsItemEntry = 0;
+    uint32 handsItemEntry = 0;
+    uint32 backItemEntry = 0;
+    uint32 tabardItemEntry = 0;
 };
 struct MatchRecord
 {
@@ -176,6 +196,12 @@ enum ReplayDynamicObjectRole
     RTG_REPLAY_OBJECT_RV_GEAR,
     RTG_REPLAY_OBJECT_RV_PULLEY,
     RTG_REPLAY_OBJECT_RV_PILLAR,
+};
+enum ReplayActorVisualBackend
+{
+    RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE = 0,
+    RTG_REPLAY_ACTOR_VISUAL_PLAYERBOT_BODY_EXPERIMENTAL = 1,
+    RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL = 2,
 };
 struct ReplayDynamicObjectBinding
 {
@@ -586,6 +612,42 @@ namespace
         return available;
     }
 
+    static bool ReplayActorSnapshotFullColumnsAvailable()
+    {
+        static bool checked = false;
+        static bool available = false;
+
+        if (!checked)
+        {
+            available =
+                ReplayActorSnapshotItemEntryColumnsAvailable() &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "skin") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "face") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "hair_style") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "hair_color") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "facial_hair") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "player_bytes") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "player_bytes_2") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "player_flags") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "shapeshift_display_id") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "shapeshift_form") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "head_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "shoulders_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "chest_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "waist_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "legs_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "feet_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "wrists_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "hands_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "back_item_entry") &&
+                ReplayColumnExists("character_arena_replay_actor_snapshot", "tabard_item_entry");
+            checked = true;
+            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_SCHEMA] fullAppearanceColumns={} result=checked", available ? 1 : 0);
+        }
+
+        return available;
+    }
+
 
     static MatchRecord& EnsureLiveMatchRecord(Battleground* bg)
     {
@@ -662,7 +724,27 @@ namespace
                 << snapshot.rangedDisplayId << ';'
                 << snapshot.mainhandItemEntry << ';'
                 << snapshot.offhandItemEntry << ';'
-                << snapshot.rangedItemEntry;
+                << snapshot.rangedItemEntry << ';'
+                << uint32(snapshot.skin) << ';'
+                << uint32(snapshot.face) << ';'
+                << uint32(snapshot.hairStyle) << ';'
+                << uint32(snapshot.hairColor) << ';'
+                << uint32(snapshot.facialHair) << ';'
+                << snapshot.playerBytes << ';'
+                << snapshot.playerBytes2 << ';'
+                << snapshot.playerFlags << ';'
+                << snapshot.shapeshiftDisplayId << ';'
+                << snapshot.shapeshiftForm << ';'
+                << snapshot.headItemEntry << ';'
+                << snapshot.shouldersItemEntry << ';'
+                << snapshot.chestItemEntry << ';'
+                << snapshot.waistItemEntry << ';'
+                << snapshot.legsItemEntry << ';'
+                << snapshot.feetItemEntry << ';'
+                << snapshot.wristsItemEntry << ';'
+                << snapshot.handsItemEntry << ';'
+                << snapshot.backItemEntry << ';'
+                << snapshot.tabardItemEntry;
         }
         return out.str();
     }
@@ -718,6 +800,29 @@ namespace
                     snapshot.mainhandItemEntry = uint32(std::stoul(parts[11]));
                     snapshot.offhandItemEntry = uint32(std::stoul(parts[12]));
                     snapshot.rangedItemEntry = uint32(std::stoul(parts[13]));
+                }
+                if (parts.size() >= 34)
+                {
+                    snapshot.skin = uint8(std::stoul(parts[14]));
+                    snapshot.face = uint8(std::stoul(parts[15]));
+                    snapshot.hairStyle = uint8(std::stoul(parts[16]));
+                    snapshot.hairColor = uint8(std::stoul(parts[17]));
+                    snapshot.facialHair = uint8(std::stoul(parts[18]));
+                    snapshot.playerBytes = uint32(std::stoul(parts[19]));
+                    snapshot.playerBytes2 = uint32(std::stoul(parts[20]));
+                    snapshot.playerFlags = uint32(std::stoul(parts[21]));
+                    snapshot.shapeshiftDisplayId = uint32(std::stoul(parts[22]));
+                    snapshot.shapeshiftForm = uint32(std::stoul(parts[23]));
+                    snapshot.headItemEntry = uint32(std::stoul(parts[24]));
+                    snapshot.shouldersItemEntry = uint32(std::stoul(parts[25]));
+                    snapshot.chestItemEntry = uint32(std::stoul(parts[26]));
+                    snapshot.waistItemEntry = uint32(std::stoul(parts[27]));
+                    snapshot.legsItemEntry = uint32(std::stoul(parts[28]));
+                    snapshot.feetItemEntry = uint32(std::stoul(parts[29]));
+                    snapshot.wristsItemEntry = uint32(std::stoul(parts[30]));
+                    snapshot.handsItemEntry = uint32(std::stoul(parts[31]));
+                    snapshot.backItemEntry = uint32(std::stoul(parts[32]));
+                    snapshot.tabardItemEntry = uint32(std::stoul(parts[33]));
                 }
             }
             catch (...)
@@ -1602,6 +1707,65 @@ namespace
         return item ? item->GetEntry() : 0;
     }
 
+    static uint8 GetReplayPackedByte(uint32 packed, uint8 index)
+    {
+        return uint8((packed >> (uint32(index) * 8u)) & 0xFFu);
+    }
+
+    static uint32 CountReplaySnapshotEquipmentEntries(ReplayActorAppearanceSnapshot const& snapshot)
+    {
+        uint32 count = 0;
+        if (snapshot.headItemEntry) ++count;
+        if (snapshot.shouldersItemEntry) ++count;
+        if (snapshot.chestItemEntry) ++count;
+        if (snapshot.waistItemEntry) ++count;
+        if (snapshot.legsItemEntry) ++count;
+        if (snapshot.feetItemEntry) ++count;
+        if (snapshot.wristsItemEntry) ++count;
+        if (snapshot.handsItemEntry) ++count;
+        if (snapshot.backItemEntry) ++count;
+        if (snapshot.tabardItemEntry) ++count;
+        if (snapshot.mainhandItemEntry) ++count;
+        if (snapshot.offhandItemEntry) ++count;
+        if (snapshot.rangedItemEntry) ++count;
+        return count;
+    }
+
+    static bool ReplayActorAppearanceSnapshotMatches(ReplayActorAppearanceSnapshot const& lhs, ReplayActorAppearanceSnapshot const& rhs)
+    {
+        return lhs.playerClass == rhs.playerClass &&
+            lhs.race == rhs.race &&
+            lhs.gender == rhs.gender &&
+            lhs.displayId == rhs.displayId &&
+            lhs.nativeDisplayId == rhs.nativeDisplayId &&
+            lhs.mainhandDisplayId == rhs.mainhandDisplayId &&
+            lhs.offhandDisplayId == rhs.offhandDisplayId &&
+            lhs.rangedDisplayId == rhs.rangedDisplayId &&
+            lhs.mainhandItemEntry == rhs.mainhandItemEntry &&
+            lhs.offhandItemEntry == rhs.offhandItemEntry &&
+            lhs.rangedItemEntry == rhs.rangedItemEntry &&
+            lhs.skin == rhs.skin &&
+            lhs.face == rhs.face &&
+            lhs.hairStyle == rhs.hairStyle &&
+            lhs.hairColor == rhs.hairColor &&
+            lhs.facialHair == rhs.facialHair &&
+            lhs.playerBytes == rhs.playerBytes &&
+            lhs.playerBytes2 == rhs.playerBytes2 &&
+            lhs.playerFlags == rhs.playerFlags &&
+            lhs.shapeshiftDisplayId == rhs.shapeshiftDisplayId &&
+            lhs.shapeshiftForm == rhs.shapeshiftForm &&
+            lhs.headItemEntry == rhs.headItemEntry &&
+            lhs.shouldersItemEntry == rhs.shouldersItemEntry &&
+            lhs.chestItemEntry == rhs.chestItemEntry &&
+            lhs.waistItemEntry == rhs.waistItemEntry &&
+            lhs.legsItemEntry == rhs.legsItemEntry &&
+            lhs.feetItemEntry == rhs.feetItemEntry &&
+            lhs.wristsItemEntry == rhs.wristsItemEntry &&
+            lhs.handsItemEntry == rhs.handsItemEntry &&
+            lhs.backItemEntry == rhs.backItemEntry &&
+            lhs.tabardItemEntry == rhs.tabardItemEntry;
+    }
+
     static ReplayActorAppearanceSnapshot BuildReplayActorAppearanceSnapshot(Player* player, bool winnerSide)
     {
         ReplayActorAppearanceSnapshot snapshot;
@@ -1616,6 +1780,26 @@ namespace
         snapshot.name = player->GetName();
         snapshot.displayId = player->GetDisplayId();
         snapshot.nativeDisplayId = player->GetNativeDisplayId();
+        snapshot.playerBytes = player->GetUInt32Value(PLAYER_BYTES);
+        snapshot.playerBytes2 = player->GetUInt32Value(PLAYER_BYTES_2);
+        snapshot.playerFlags = player->GetUInt32Value(PLAYER_FLAGS);
+        snapshot.skin = GetReplayPackedByte(snapshot.playerBytes, 0);
+        snapshot.face = GetReplayPackedByte(snapshot.playerBytes, 1);
+        snapshot.hairStyle = GetReplayPackedByte(snapshot.playerBytes, 2);
+        snapshot.hairColor = GetReplayPackedByte(snapshot.playerBytes, 3);
+        snapshot.facialHair = GetReplayPackedByte(snapshot.playerBytes2, 0);
+        snapshot.shapeshiftDisplayId = (snapshot.displayId && snapshot.nativeDisplayId && snapshot.displayId != snapshot.nativeDisplayId) ? snapshot.displayId : 0;
+        snapshot.shapeshiftForm = uint32(player->GetShapeshiftForm());
+        snapshot.headItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_HEAD);
+        snapshot.shouldersItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_SHOULDERS);
+        snapshot.chestItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_CHEST);
+        snapshot.waistItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_WAIST);
+        snapshot.legsItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_LEGS);
+        snapshot.feetItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_FEET);
+        snapshot.wristsItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_WRISTS);
+        snapshot.handsItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_HANDS);
+        snapshot.backItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_BACK);
+        snapshot.tabardItemEntry = GetPlayerEquippedItemEntry(player, EQUIPMENT_SLOT_TABARD);
         snapshot.mainhandDisplayId = GetPlayerEquippedItemDisplayId(player, EQUIPMENT_SLOT_MAINHAND);
         snapshot.offhandDisplayId = GetPlayerEquippedItemDisplayId(player, EQUIPMENT_SLOT_OFFHAND);
         snapshot.rangedDisplayId = GetPlayerEquippedItemDisplayId(player, EQUIPMENT_SLOT_RANGED);
@@ -1652,10 +1836,7 @@ namespace
             return;
         }
 
-        uint32 itemEntryCount = 0;
-        if (snapshot.mainhandItemEntry) ++itemEntryCount;
-        if (snapshot.offhandItemEntry) ++itemEntryCount;
-        if (snapshot.rangedItemEntry) ++itemEntryCount;
+        uint32 itemEntryCount = CountReplaySnapshotEquipmentEntries(snapshot);
 
         auto existing = match.actorAppearanceSnapshots.find(snapshot.guid);
         bool changed = existing == match.actorAppearanceSnapshots.end();
@@ -1668,17 +1849,7 @@ namespace
                 snapshot.nativeDisplayId = existing->second.nativeDisplayId;
 
             ReplayActorAppearanceSnapshot const& prior = existing->second;
-            changed = prior.playerClass != snapshot.playerClass ||
-                prior.race != snapshot.race ||
-                prior.gender != snapshot.gender ||
-                prior.displayId != snapshot.displayId ||
-                prior.nativeDisplayId != snapshot.nativeDisplayId ||
-                prior.mainhandDisplayId != snapshot.mainhandDisplayId ||
-                prior.offhandDisplayId != snapshot.offhandDisplayId ||
-                prior.rangedDisplayId != snapshot.rangedDisplayId ||
-                prior.mainhandItemEntry != snapshot.mainhandItemEntry ||
-                prior.offhandItemEntry != snapshot.offhandItemEntry ||
-                prior.rangedItemEntry != snapshot.rangedItemEntry;
+            changed = !ReplayActorAppearanceSnapshotMatches(prior, snapshot);
         }
 
         match.actorAppearanceSnapshots[snapshot.guid] = snapshot;
@@ -1704,12 +1875,47 @@ namespace
                 itemEntryCount,
                 source ? source : "unknown",
                 changed ? 1 : 0);
-            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replayInstance={} actorGuid={} name={} displayId={} nativeDisplayId={} result=base_player_display_only reason=creature_clone_cannot_show_full_player_armor",
+            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replayInstance={} actorGuid={} name={} displayId={} nativeDisplayId={} result=creature_silhouette_mode reason=creature_clone_cannot_show_full_player_armor",
                 bg->GetInstanceID(),
                 snapshot.guid,
                 snapshot.name,
                 snapshot.displayId,
                 snapshot.nativeDisplayId);
+            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_CAPTURE_FULL] replayInstance={} actorGuid={} name={} race={} class={} gender={} skin={} face={} hairStyle={} hairColor={} facialHair={} playerBytes={} playerBytes2={} playerFlags={} displayId={} nativeDisplayId={} shapeshiftDisplayId={} shapeshiftForm={} headEntry={} shouldersEntry={} chestEntry={} waistEntry={} legsEntry={} feetEntry={} wristsEntry={} handsEntry={} backEntry={} tabardEntry={} mainhandEntry={} offhandEntry={} rangedEntry={} equipmentCount={} source={} changed={} result=ok",
+                bg->GetInstanceID(),
+                snapshot.guid,
+                snapshot.name,
+                uint32(snapshot.race),
+                uint32(snapshot.playerClass),
+                uint32(snapshot.gender),
+                uint32(snapshot.skin),
+                uint32(snapshot.face),
+                uint32(snapshot.hairStyle),
+                uint32(snapshot.hairColor),
+                uint32(snapshot.facialHair),
+                snapshot.playerBytes,
+                snapshot.playerBytes2,
+                snapshot.playerFlags,
+                snapshot.displayId,
+                snapshot.nativeDisplayId,
+                snapshot.shapeshiftDisplayId,
+                snapshot.shapeshiftForm,
+                snapshot.headItemEntry,
+                snapshot.shouldersItemEntry,
+                snapshot.chestItemEntry,
+                snapshot.waistItemEntry,
+                snapshot.legsItemEntry,
+                snapshot.feetItemEntry,
+                snapshot.wristsItemEntry,
+                snapshot.handsItemEntry,
+                snapshot.backItemEntry,
+                snapshot.tabardItemEntry,
+                snapshot.mainhandItemEntry,
+                snapshot.offhandItemEntry,
+                snapshot.rangedItemEntry,
+                itemEntryCount,
+                source ? source : "unknown",
+                changed ? 1 : 0);
         }
     }
 
@@ -1765,11 +1971,55 @@ namespace
         CharacterDatabase.Execute("DELETE FROM `character_arena_replay_actor_snapshot` WHERE `replay_id` = {}", replayId);
 
         uint32 persisted = 0;
+        bool const fullColumns = ReplayActorSnapshotFullColumnsAvailable();
         bool const itemEntryColumns = ReplayActorSnapshotItemEntryColumnsAvailable();
         for (auto const& pair : match.actorAppearanceSnapshots)
         {
             ReplayActorAppearanceSnapshot const& snapshot = pair.second;
-            if (itemEntryColumns)
+            if (fullColumns)
+            {
+                CharacterDatabase.Execute(
+                    "INSERT INTO `character_arena_replay_actor_snapshot` "
+                    "(`replay_id`, `actor_guid`, `winner_side`, `actor_name`, `player_class`, `race`, `gender`, `display_id`, `native_display_id`, `mainhand_display_id`, `offhand_display_id`, `ranged_display_id`, `mainhand_item_entry`, `offhand_item_entry`, `ranged_item_entry`, `skin`, `face`, `hair_style`, `hair_color`, `facial_hair`, `player_bytes`, `player_bytes_2`, `player_flags`, `shapeshift_display_id`, `shapeshift_form`, `head_item_entry`, `shoulders_item_entry`, `chest_item_entry`, `waist_item_entry`, `legs_item_entry`, `feet_item_entry`, `wrists_item_entry`, `hands_item_entry`, `back_item_entry`, `tabard_item_entry`) "
+                    "VALUES ({}, {}, {}, '{}', {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
+                    replayId,
+                    snapshot.guid,
+                    snapshot.winnerSide ? 1 : 0,
+                    EscapeSqlString(snapshot.name),
+                    uint32(snapshot.playerClass),
+                    uint32(snapshot.race),
+                    uint32(snapshot.gender),
+                    snapshot.displayId,
+                    snapshot.nativeDisplayId,
+                    snapshot.mainhandDisplayId,
+                    snapshot.offhandDisplayId,
+                    snapshot.rangedDisplayId,
+                    snapshot.mainhandItemEntry,
+                    snapshot.offhandItemEntry,
+                    snapshot.rangedItemEntry,
+                    uint32(snapshot.skin),
+                    uint32(snapshot.face),
+                    uint32(snapshot.hairStyle),
+                    uint32(snapshot.hairColor),
+                    uint32(snapshot.facialHair),
+                    snapshot.playerBytes,
+                    snapshot.playerBytes2,
+                    snapshot.playerFlags,
+                    snapshot.shapeshiftDisplayId,
+                    snapshot.shapeshiftForm,
+                    snapshot.headItemEntry,
+                    snapshot.shouldersItemEntry,
+                    snapshot.chestItemEntry,
+                    snapshot.waistItemEntry,
+                    snapshot.legsItemEntry,
+                    snapshot.feetItemEntry,
+                    snapshot.wristsItemEntry,
+                    snapshot.handsItemEntry,
+                    snapshot.backItemEntry,
+                    snapshot.tabardItemEntry
+                );
+            }
+            else if (itemEntryColumns)
             {
                 CharacterDatabase.Execute(
                     "INSERT INTO `character_arena_replay_actor_snapshot` "
@@ -1815,7 +2065,7 @@ namespace
             ++persisted;
         }
 
-        LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_PERSIST] replayId={} snapshotCount={} itemEntryColumns={} result=ok", replayId, persisted, itemEntryColumns ? 1 : 0);
+        LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_PERSIST] replayId={} snapshotCount={} itemEntryColumns={} fullAppearanceColumns={} result=ok", replayId, persisted, itemEntryColumns ? 1 : 0, fullColumns ? 1 : 0);
     }
 
     static void LoadReplayActorAppearanceSnapshots(MatchRecord& record, uint32 replayId)
@@ -1825,8 +2075,14 @@ namespace
         if (!replayId)
             return;
 
+        bool const fullColumns = ReplayActorSnapshotFullColumnsAvailable();
         bool const itemEntryColumns = ReplayActorSnapshotItemEntryColumnsAvailable();
-        QueryResult result = itemEntryColumns
+        QueryResult result = fullColumns
+            ? CharacterDatabase.Query(
+                "SELECT `actor_guid`, `winner_side`, `actor_name`, `player_class`, `race`, `gender`, `display_id`, `native_display_id`, `mainhand_display_id`, `offhand_display_id`, `ranged_display_id`, `mainhand_item_entry`, `offhand_item_entry`, `ranged_item_entry`, `skin`, `face`, `hair_style`, `hair_color`, `facial_hair`, `player_bytes`, `player_bytes_2`, `player_flags`, `shapeshift_display_id`, `shapeshift_form`, `head_item_entry`, `shoulders_item_entry`, `chest_item_entry`, `waist_item_entry`, `legs_item_entry`, `feet_item_entry`, `wrists_item_entry`, `hands_item_entry`, `back_item_entry`, `tabard_item_entry` "
+                "FROM `character_arena_replay_actor_snapshot` WHERE `replay_id` = {}",
+                replayId)
+            : itemEntryColumns
             ? CharacterDatabase.Query(
                 "SELECT `actor_guid`, `winner_side`, `actor_name`, `player_class`, `race`, `gender`, `display_id`, `native_display_id`, `mainhand_display_id`, `offhand_display_id`, `ranged_display_id`, `mainhand_item_entry`, `offhand_item_entry`, `ranged_item_entry` "
                 "FROM `character_arena_replay_actor_snapshot` WHERE `replay_id` = {}",
@@ -1866,6 +2122,29 @@ namespace
                 snapshot.offhandItemEntry = fields[12].Get<uint32>();
                 snapshot.rangedItemEntry = fields[13].Get<uint32>();
             }
+            if (fullColumns)
+            {
+                snapshot.skin = fields[14].Get<uint8>();
+                snapshot.face = fields[15].Get<uint8>();
+                snapshot.hairStyle = fields[16].Get<uint8>();
+                snapshot.hairColor = fields[17].Get<uint8>();
+                snapshot.facialHair = fields[18].Get<uint8>();
+                snapshot.playerBytes = fields[19].Get<uint32>();
+                snapshot.playerBytes2 = fields[20].Get<uint32>();
+                snapshot.playerFlags = fields[21].Get<uint32>();
+                snapshot.shapeshiftDisplayId = fields[22].Get<uint32>();
+                snapshot.shapeshiftForm = fields[23].Get<uint32>();
+                snapshot.headItemEntry = fields[24].Get<uint32>();
+                snapshot.shouldersItemEntry = fields[25].Get<uint32>();
+                snapshot.chestItemEntry = fields[26].Get<uint32>();
+                snapshot.waistItemEntry = fields[27].Get<uint32>();
+                snapshot.legsItemEntry = fields[28].Get<uint32>();
+                snapshot.feetItemEntry = fields[29].Get<uint32>();
+                snapshot.wristsItemEntry = fields[30].Get<uint32>();
+                snapshot.handsItemEntry = fields[31].Get<uint32>();
+                snapshot.backItemEntry = fields[32].Get<uint32>();
+                snapshot.tabardItemEntry = fields[33].Get<uint32>();
+            }
             if (snapshot.guid)
             {
                 record.actorAppearanceSnapshots[snapshot.guid] = std::move(snapshot);
@@ -1874,7 +2153,7 @@ namespace
         }
         while (result->NextRow());
 
-        LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LOAD] replayId={} snapshotCount={} itemEntryColumns={} result=ok", replayId, loaded, itemEntryColumns ? 1 : 0);
+        LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LOAD] replayId={} snapshotCount={} itemEntryColumns={} fullAppearanceColumns={} result=ok", replayId, loaded, itemEntryColumns ? 1 : 0, fullColumns ? 1 : 0);
     }
 
     static ReplayActorAppearanceSnapshot const* FindReplayActorAppearanceSnapshot(MatchRecord const& match, uint64 actorGuid)
@@ -1982,7 +2261,7 @@ namespace
 
         if (snapshot && std::string(source) == "snapshot")
         {
-            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replay={} actorGuid={} actorName={} displayId={} nativeDisplayId={} result=base_player_display_only reason=creature_clone_cannot_show_full_player_armor",
+            LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replay={} actorGuid={} actorName={} displayId={} nativeDisplayId={} result=creature_silhouette_mode reason=creature_clone_cannot_show_full_player_armor",
                 session.replayId,
                 track.guid,
                 track.name,
@@ -2108,6 +2387,83 @@ namespace
             return hardcodedFallback;
 
         return displayId;
+    }
+
+    static ReplayActorVisualBackend GetReplayActorVisualBackend()
+    {
+        uint32 backend = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.Backend", uint32(RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE));
+        if (backend > uint32(RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL))
+            backend = uint32(RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE);
+        return ReplayActorVisualBackend(backend);
+    }
+
+    static char const* GetReplayActorVisualBackendName(ReplayActorVisualBackend backend)
+    {
+        switch (backend)
+        {
+            case RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE:
+                return "creature_silhouette";
+            case RTG_REPLAY_ACTOR_VISUAL_PLAYERBOT_BODY_EXPERIMENTAL:
+                return "playerbot_body_experimental";
+            case RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL:
+                return "synthetic_player_object_experimental";
+            default:
+                return "unknown";
+        }
+    }
+
+    static bool ReplayPlayerBodyBackendEnabled()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.PlayerBody.Enable", false);
+    }
+
+    static void LogReplayPlayerBodyPlan(Player* viewer, MatchRecord const& match, ActiveReplaySession const& session)
+    {
+        ReplayActorVisualBackend backend = GetReplayActorVisualBackend();
+        if (backend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE)
+            return;
+
+        bool backendAvailable = false;
+        bool playerBodyEnabled = ReplayPlayerBodyBackendEnabled();
+        std::string accountPrefix = sConfigMgr->GetOption<std::string>("ArenaReplay.ActorVisual.PlayerBody.AccountPrefix", "rtgreplay");
+        uint32 bodyLevel = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.PlayerBody.Level", 19u);
+        uint32 planned = 0;
+
+        for (ReplayActorSelectionRef const& ref : BuildPlayableReplayActorSelections(match))
+        {
+            auto const* tracks = SelectTracks(match, ref.winnerSide);
+            if (!tracks || ref.trackIndex >= tracks->size())
+                continue;
+
+            ActorTrack const& track = (*tracks)[ref.trackIndex];
+            ReplayActorAppearanceSnapshot const* snapshot = FindReplayActorAppearanceSnapshot(match, track.guid);
+            uint32 equipmentCount = snapshot ? CountReplaySnapshotEquipmentEntries(*snapshot) : 0;
+
+            LOG_INFO("server.loading", "[RTG][REPLAY][PLAYER_BODY_PLAN] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} actorGuid={} name={} race={} gender={} class={} equipmentCount={} backend={} playerBodyEnable={} accountPrefix={} level={} backendAvailable={} result=planned_only",
+                session.replayId,
+                viewer ? viewer->GetGUID().GetCounter() : 0,
+                session.nativeMapId,
+                session.replayMapId,
+                session.replayPhaseMask,
+                track.guid,
+                track.name,
+                snapshot ? uint32(snapshot->race) : uint32(track.race),
+                snapshot ? uint32(snapshot->gender) : uint32(track.gender),
+                snapshot ? uint32(snapshot->playerClass) : uint32(track.playerClass),
+                equipmentCount,
+                GetReplayActorVisualBackendName(backend),
+                playerBodyEnabled ? 1 : 0,
+                accountPrefix,
+                bodyLevel,
+                backendAvailable ? 1 : 0);
+            ++planned;
+        }
+
+        LOG_WARN("server.loading", "[RTG][REPLAY][ACTOR_VISUAL_BACKEND] replay={} viewerGuid={} backend={} plannedActors={} backendAvailable=0 result=fallback_to_creature_silhouette",
+            session.replayId,
+            viewer ? viewer->GetGUID().GetCounter() : 0,
+            GetReplayActorVisualBackendName(backend),
+            planned);
     }
 
     static bool ReplayCameraAnchorRequired()
@@ -2927,6 +3283,17 @@ namespace
         classifyTracks(match.loserActorTracks, false);
 
         std::vector<ReplayActorSelectionRef> playable = BuildPlayableReplayActorSelections(match);
+        ReplayActorVisualBackend visualBackend = GetReplayActorVisualBackend();
+        LOG_INFO("server.loading", "[RTG][REPLAY][ACTOR_VISUAL_BACKEND] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} backend={} result={}",
+            session.replayId,
+            viewer->GetGUID().GetCounter(),
+            session.nativeMapId,
+            session.replayMapId,
+            session.replayPhaseMask,
+            GetReplayActorVisualBackendName(visualBackend),
+            visualBackend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE ? "creature_silhouette_mode" : "experimental_planned_only");
+        LogReplayPlayerBodyPlan(viewer, match, session);
+
         uint32 prewarmTeam0 = 0;
         uint32 prewarmTeam1 = 0;
         if (GetReplayCloneEntry() == GetReplayCameraAnchorEntry())
@@ -4339,10 +4706,10 @@ namespace
         float smoothDeltaZ = 0.0f;
         if (sConfigMgr->GetOption<bool>("ArenaReplay.ActorSpectate.CameraSmoothing.Enable", true))
         {
-            float xyLerpPct = std::min(1.0f, std::max(0.01f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct", 0.45f)));
-            float zLerpPct = std::min(1.0f, std::max(0.01f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct", 0.18f)));
-            float zDeadband = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband", 0.30f));
-            float zSnapDistance = std::max(zDeadband, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance", 4.0f));
+            float xyLerpPct = std::min(1.0f, std::max(0.01f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct", 0.35f)));
+            float zLerpPct = std::min(1.0f, std::max(0.01f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct", 0.08f)));
+            float zDeadband = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband", 0.75f));
+            float zSnapDistance = std::max(zDeadband, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance", 6.0f));
 
             if (!session.hasSmoothedCamera || forceImmediate || actorChanged)
             {
@@ -4398,9 +4765,9 @@ namespace
                 float adz = anchor->GetPositionZ() - targetZ;
                 float anchorDistSq = adx * adx + ady * ady + adz * adz;
                 float anchorXYDistSq = adx * adx + ady * ady;
-                float minAnchorMoveDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance", 0.10f));
-                float minAnchorZMoveDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance", 0.20f));
-                uint32 minMoveMs = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs", 50u);
+                float minAnchorMoveDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance", 0.25f));
+                float minAnchorZMoveDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance", 0.50f));
+                uint32 minMoveMs = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs", 100u);
                 bool moveDue = minMoveMs == 0 || session.lastCameraMoveMs == 0 || nowMs >= session.lastCameraMoveMs + minMoveMs;
                 bool smallMoveExceeded = anchorXYDistSq > (minAnchorMoveDistance * minAnchorMoveDistance) || std::abs(adz) > minAnchorZMoveDistance;
                 if (forceImmediate || anchorDistSq > (snapDistance * snapDistance) || actorChanged || (moveDue && smallMoveExceeded))
