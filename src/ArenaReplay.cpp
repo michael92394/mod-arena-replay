@@ -202,6 +202,7 @@ enum ReplayActorVisualBackend
     RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE = 0,
     RTG_REPLAY_ACTOR_VISUAL_PLAYERBOT_BODY_EXPERIMENTAL = 1,
     RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL = 2,
+    RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM = 3,
 };
 struct ReplayDynamicObjectBinding
 {
@@ -343,6 +344,8 @@ namespace
     static uint32 ResolveVisibleReplayFallbackDisplay(ActorTrack const& track, bool winnerSide);
     static bool ReplayCreatureSilhouetteUsePlayerDisplayIds();
     static uint32 ResolveCreatureSilhouetteDisplay(ReplayActorAppearanceSnapshot const* snapshot, ActorTrack const& track, bool winnerSide, char const*& reason);
+    static ReplayActorVisualBackend GetReplayActorVisualBackend();
+    static bool ReplayRecordedPacketVisualBackendEnabled();
     static uint32 ResolveReplayMapId(uint32 nativeMapId);
     static uint32 AllocateReplayPrivatePhaseMask(uint64 viewerKey);
     static bool ApplyReplayViewerPrivatePhase(Player* viewer, ActiveReplaySession& session);
@@ -1040,18 +1043,30 @@ namespace
             sConfigMgr->GetOption<bool>("ArenaReplay.Playback.CloneMode.Enable", true);
     }
 
+    static bool ReplayRecordedPacketVisualBackendEnabled()
+    {
+        return GetReplayActorVisualBackend() == RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM ||
+            sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.RecordedPacketStream.Enable", false);
+    }
+
     static bool ReplayCloneModeSendRecordedWorldPackets()
     {
+        if (ReplayRecordedPacketVisualBackendEnabled())
+            return true;
         return sConfigMgr->GetOption<bool>("ArenaReplay.Playback.CloneMode.SendRecordedWorldPackets", false);
     }
 
     static bool ReplayCloneModeFilterObjectUpdatePackets()
     {
+        if (ReplayRecordedPacketVisualBackendEnabled())
+            return false;
         return sConfigMgr->GetOption<bool>("ArenaReplay.Playback.CloneMode.FilterObjectUpdatePackets", true);
     }
 
     static bool ReplayCloneModeFilterMovementPackets()
     {
+        if (ReplayRecordedPacketVisualBackendEnabled())
+            return false;
         return sConfigMgr->GetOption<bool>("ArenaReplay.Playback.CloneMode.FilterMovementPackets", true);
     }
 
@@ -1067,6 +1082,8 @@ namespace
 
     static bool ReplayCloneModePrewarmClones()
     {
+        if (ReplayRecordedPacketVisualBackendEnabled())
+            return false;
         return sConfigMgr->GetOption<bool>("ArenaReplay.Playback.CloneMode.PrewarmClonesAtFirstFrame", true);
     }
 
@@ -2512,9 +2529,9 @@ namespace
 
     static ReplayActorVisualBackend GetReplayActorVisualBackend()
     {
-        uint32 backend = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.Backend", uint32(RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE));
-        if (backend > uint32(RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL))
-            backend = uint32(RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE);
+        uint32 backend = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.Backend", uint32(RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM));
+        if (backend > uint32(RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM))
+            backend = uint32(RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM);
         return ReplayActorVisualBackend(backend);
     }
 
@@ -2528,6 +2545,8 @@ namespace
                 return "playerbot_body_experimental";
             case RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL:
                 return "synthetic_player_object_experimental";
+            case RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM:
+                return "recorded_packet_stream";
             default:
                 return "unknown";
         }
@@ -2541,7 +2560,7 @@ namespace
     static void LogReplayPlayerBodyPlan(Player* viewer, MatchRecord const& match, ActiveReplaySession const& session)
     {
         ReplayActorVisualBackend backend = GetReplayActorVisualBackend();
-        if (backend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE)
+        if (backend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE || backend == RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM)
             return;
 
         bool backendAvailable = false;
@@ -3373,11 +3392,11 @@ namespace
         if (!viewer || !viewer->GetMap())
             return false;
 
-        if (!sConfigMgr->GetOption<bool>("ArenaReplay.CloneScene.Enable", true))
+        if (!sConfigMgr->GetOption<bool>("ArenaReplay.CloneScene.Enable", true) && !ReplayRecordedPacketVisualBackendEnabled())
             return false;
 
         if (session.cloneSceneBuilt)
-            return !session.cloneBindings.empty();
+            return ReplayRecordedPacketVisualBackendEnabled() || !session.cloneBindings.empty();
 
         uint32 totalActors = uint32(match.winnerActorTracks.size() + match.loserActorTracks.size());
         uint32 playableActors = 0;
@@ -3441,8 +3460,26 @@ namespace
             session.replayMapId,
             session.replayPhaseMask,
             GetReplayActorVisualBackendName(visualBackend),
-            visualBackend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE ? "creature_silhouette_debug" : "experimental_planned_only");
+            visualBackend == RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM ? "recorded_packet_stream_authoritative" :
+                (visualBackend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE ? "creature_silhouette_debug" : "experimental_planned_only"));
         LogReplayPlayerBodyPlan(viewer, match, session);
+
+        if (visualBackend == RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM)
+        {
+            session.cloneSceneBuilt = true;
+            LOG_INFO("server.loading", "[RTG][REPLAY][PACKET_VISUAL_SCENE] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} totalActors={} playableActors={} team0Count={} team1Count={} packets={} result=use_recorded_packets_no_creature_clones",
+                session.replayId,
+                viewer->GetGUID().GetCounter(),
+                session.nativeMapId,
+                session.replayMapId,
+                session.replayPhaseMask,
+                totalActors,
+                playableActors,
+                team0Count,
+                team1Count,
+                match.packets.size());
+            return true;
+        }
 
         uint32 prewarmTeam0 = 0;
         uint32 prewarmTeam1 = 0;

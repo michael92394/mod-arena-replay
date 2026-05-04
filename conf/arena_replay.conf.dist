@@ -499,7 +499,7 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #        Default:     0 - Disabled
 #                     1 - Enabled
 #
-#        Example:     ArenaReplay.Playback.CloneMode.SendRecordedWorldPackets = 0
+#        Example:     ArenaReplay.Playback.CloneMode.SendRecordedWorldPackets = 1
 #                     Clone scene remains authoritative for world visuals.
 #
 #    ArenaReplay.Playback.CloneMode.FilterObjectUpdatePackets
@@ -510,7 +510,7 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
-#        Example:     ArenaReplay.Playback.CloneMode.FilterObjectUpdatePackets = 1
+#        Example:     ArenaReplay.Playback.CloneMode.FilterObjectUpdatePackets = 0
 #                     Recorded object updates cannot overwrite clone visuals.
 #
 #    ArenaReplay.Playback.CloneMode.FilterMovementPackets
@@ -520,7 +520,7 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
-#        Example:     ArenaReplay.Playback.CloneMode.FilterMovementPackets = 1
+#        Example:     ArenaReplay.Playback.CloneMode.FilterMovementPackets = 0
 #                     Actor tracks, not raw movement packets, move replay clones.
 #
 #    ArenaReplay.Playback.CloneMode.StartAtFirstActorFrame
@@ -585,9 +585,9 @@ ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.75
 ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 ArenaReplay.Playback.Mode = 1
 ArenaReplay.Playback.CloneMode.Enable = 1
-ArenaReplay.Playback.CloneMode.SendRecordedWorldPackets = 0
-ArenaReplay.Playback.CloneMode.FilterObjectUpdatePackets = 1
-ArenaReplay.Playback.CloneMode.FilterMovementPackets = 1
+ArenaReplay.Playback.CloneMode.SendRecordedWorldPackets = 1
+ArenaReplay.Playback.CloneMode.FilterObjectUpdatePackets = 0
+ArenaReplay.Playback.CloneMode.FilterMovementPackets = 0
 ArenaReplay.Playback.CloneMode.StartAtFirstActorFrame = 1
 ArenaReplay.Playback.CloneMode.TrimPreMatchDeadAir = 1
 ArenaReplay.Playback.CloneMode.PrewarmClonesAtFirstFrame = 1
@@ -615,12 +615,37 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #                     Backend 2 is reserved for a future synthetic player object
 #                     backend and currently falls back to backend 0.
 #
-#        Default:     0 - creature_silhouette_debug
+#                     Backend 3 is recorded_packet_stream. It disables creature
+#                     actor clones and lets the original recorded object,
+#                     movement, spell, swing, aura, and combat packets be the
+#                     authoritative visual layer. This restores real-looking
+#                     player bodies and client-side animations from the original
+#                     replay stream while copied-map objects and the spectator
+#                     camera remain controlled by the module.
+#
+#        Default:     3 - recorded_packet_stream
+#                     0 - creature_silhouette_debug
 #                     1 - playerbot_body_experimental
 #                     2 - synthetic_player_object_experimental
 #
-#        Example:     ArenaReplay.ActorVisual.Backend = 0
-#                     Uses debug creature silhouette replay bodies.
+#        Example:     ArenaReplay.ActorVisual.Backend = 3
+#                     Uses recorded packet visuals instead of creature clones.
+#
+#    ArenaReplay.ActorVisual.RecordedPacketStream.Enable
+#        Description: Explicitly enables recorded-packet visual mode even when
+#                     ActorVisual.Backend is not set to 3. This is a repair
+#                     switch for deployments that already have an older
+#                     ActorVisual.Backend = 0 in their active config.
+#
+#                     Recorded-packet visual mode is the current preferred
+#                     backend because creature clones cannot render real player
+#                     appearance or animation faithfully.
+#
+#        Default:     1 - Enabled with this distribution
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorVisual.RecordedPacketStream.Enable = 1
+#                     Uses original recorded packets for real player visuals.
 #
 #    ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds
 #        Description: Controls whether creature silhouette actors apply raw
@@ -768,7 +793,8 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 #                     Future replay bodies use captured customization.
 #
-ArenaReplay.ActorVisual.Backend = 0
+ArenaReplay.ActorVisual.Backend = 3
+ArenaReplay.ActorVisual.RecordedPacketStream.Enable = 1
 ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds = 0
 ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays = 1
 ArenaReplay.ActorVisual.CreatureSilhouette.Display.Default = 27800
@@ -798,7 +824,7 @@ ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
-#        Example:     ArenaReplay.CloneScene.Enable = 1
+#        Example:     ArenaReplay.CloneScene.Enable = 0
 #                     Replay playback uses synchronized surrogate actors.
 #
 #    ArenaReplay.CloneScene.UseViewpoint
@@ -1014,7 +1040,7 @@ ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 #        Example:     ArenaReplay.CloneScene.SyncMs = 40
 #                     Replay clones are updated every 40 ms.
 #
-ArenaReplay.CloneScene.Enable = 1
+ArenaReplay.CloneScene.Enable = 0
 ArenaReplay.CloneScene.UseViewpoint = 1
 ArenaReplay.CloneScene.CloneEntry = 98501
 ArenaReplay.CloneScene.CameraAnchorEntry = 98502
