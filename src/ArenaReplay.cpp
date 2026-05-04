@@ -341,6 +341,8 @@ namespace
     static bool ReplayDynamicObjectsDebugEnabled();
     static bool IsInvalidReplayCloneDisplay(uint32 displayId, ActiveReplaySession const& session);
     static uint32 ResolveVisibleReplayFallbackDisplay(ActorTrack const& track, bool winnerSide);
+    static bool ReplayCreatureSilhouetteUsePlayerDisplayIds();
+    static uint32 ResolveCreatureSilhouetteDisplay(ReplayActorAppearanceSnapshot const* snapshot, ActorTrack const& track, bool winnerSide, char const*& reason);
     static uint32 ResolveReplayMapId(uint32 nativeMapId);
     static uint32 AllocateReplayPrivatePhaseMask(uint64 viewerKey);
     static bool ApplyReplayViewerPrivatePhase(Player* viewer, ActiveReplaySession& session);
@@ -2175,15 +2177,15 @@ namespace
         uint32 mainhandEntry = 0;
         uint32 offhandEntry = 0;
         uint32 rangedEntry = 0;
+        uint32 playerDisplayId = snapshot ? (snapshot->displayId ? snapshot->displayId : snapshot->nativeDisplayId) : 0;
+        char const* silhouetteReason = "none";
 
         if (snapshot)
         {
-            uint32 snapshotDisplay = snapshot->displayId ? snapshot->displayId : snapshot->nativeDisplayId;
+            uint32 snapshotDisplay = ResolveCreatureSilhouetteDisplay(snapshot, track, winnerSide, silhouetteReason);
             if (!IsInvalidReplayCloneDisplay(snapshotDisplay, session))
             {
-                if (snapshot->nativeDisplayId && !IsInvalidReplayCloneDisplay(snapshot->nativeDisplayId, session))
-                    clone->SetNativeDisplayId(snapshot->nativeDisplayId);
-
+                clone->SetNativeDisplayId(snapshotDisplay);
                 clone->SetDisplayId(snapshotDisplay);
                 mainhandEntry = snapshot->mainhandItemEntry;
                 offhandEntry = snapshot->offhandItemEntry;
@@ -2192,7 +2194,22 @@ namespace
                 clone->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + 1, offhandEntry);
                 clone->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + 2, rangedEntry);
                 finalDisplay = snapshotDisplay;
-                source = "snapshot";
+                source = ReplayCreatureSilhouetteUsePlayerDisplayIds() && finalDisplay == playerDisplayId ? "snapshot" : "silhouette";
+
+                if (std::string(silhouetteReason) == "avoid_raw_player_display_on_creature")
+                {
+                    LOG_INFO("server.loading", "[RTG][REPLAY][CREATURE_SILHOUETTE_DISPLAY] replay={} actorGuid={} actorName={} race={} gender={} class={} playerDisplayId={} nativeDisplayId={} fallbackCreatureDisplayId={} reason={} result=ok",
+                        session.replayId,
+                        track.guid,
+                        track.name,
+                        snapshot ? uint32(snapshot->race) : uint32(track.race),
+                        snapshot ? uint32(snapshot->gender) : uint32(track.gender),
+                        GetClassToken(snapshot && snapshot->playerClass ? snapshot->playerClass : track.playerClass),
+                        playerDisplayId,
+                        snapshot ? snapshot->nativeDisplayId : 0,
+                        finalDisplay,
+                        silhouetteReason);
+                }
 
                 if (!mainhandEntry && !offhandEntry && !rangedEntry &&
                     (snapshot->mainhandDisplayId || snapshot->offhandDisplayId || snapshot->rangedDisplayId))
@@ -2210,7 +2227,8 @@ namespace
 
         if (IsInvalidReplayCloneDisplay(finalDisplay, session))
         {
-            finalDisplay = ResolveVisibleReplayFallbackDisplay(track, winnerSide);
+            silhouetteReason = "display_repair";
+            finalDisplay = ResolveCreatureSilhouetteDisplay(snapshot, track, winnerSide, silhouetteReason);
             clone->SetNativeDisplayId(finalDisplay);
             clone->SetDisplayId(finalDisplay);
             mainhandEntry = 0;
@@ -2224,7 +2242,8 @@ namespace
 
         if (IsInvalidReplayCloneDisplay(clone->GetDisplayId(), session))
         {
-            uint32 repairedDisplay = ResolveVisibleReplayFallbackDisplay(track, winnerSide);
+            char const* repairReason = "display_repair";
+            uint32 repairedDisplay = ResolveCreatureSilhouetteDisplay(snapshot, track, winnerSide, repairReason);
             clone->SetNativeDisplayId(repairedDisplay);
             clone->SetDisplayId(repairedDisplay);
             LOG_WARN("server.loading", "[RTG][REPLAY][CLONE_DISPLAY_REPAIR] replay={} actorGuid={} actorName={} class={} cloneGuid={} originalDisplay={} repairedDisplay={} result={}",
@@ -2259,7 +2278,7 @@ namespace
             offhandEntry,
             rangedEntry);
 
-        if (snapshot && std::string(source) == "snapshot")
+        if (snapshot)
         {
             LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_LIMIT] replay={} actorGuid={} actorName={} displayId={} nativeDisplayId={} result=creature_silhouette_mode reason=creature_clone_cannot_show_full_player_armor",
                 session.replayId,
@@ -2369,6 +2388,40 @@ namespace
         }
     }
 
+    static char const* GetReplayRaceToken(uint8 race)
+    {
+        switch (race)
+        {
+            case RACE_HUMAN:
+                return "Human";
+            case RACE_ORC:
+                return "Orc";
+            case RACE_DWARF:
+                return "Dwarf";
+            case RACE_NIGHTELF:
+                return "NightElf";
+            case RACE_UNDEAD_PLAYER:
+                return "Undead";
+            case RACE_TAUREN:
+                return "Tauren";
+            case RACE_GNOME:
+                return "Gnome";
+            case RACE_TROLL:
+                return "Troll";
+            case RACE_BLOODELF:
+                return "BloodElf";
+            case RACE_DRAENEI:
+                return "Draenei";
+            default:
+                return "Default";
+        }
+    }
+
+    static char const* GetReplayGenderToken(uint8 gender)
+    {
+        return gender == GENDER_FEMALE ? "Female" : "Male";
+    }
+
     static uint32 ResolveVisibleReplayFallbackDisplay(ActorTrack const& track, bool /*winnerSide*/)
     {
         uint32 hardcodedFallback = GetHardcodedReplayFallbackDisplay();
@@ -2387,6 +2440,74 @@ namespace
             return hardcodedFallback;
 
         return displayId;
+    }
+
+    static bool ReplayCreatureSilhouetteUsePlayerDisplayIds()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds", false);
+    }
+
+    static bool ReplayCreatureSilhouetteUseNpcRaceFallbackDisplays()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays", true);
+    }
+
+    static uint32 GetHardcodedReplayNpcSilhouetteDisplay()
+    {
+        return 27800u;
+    }
+
+    static uint32 ResolveCreatureSilhouetteNpcDisplay(ReplayActorAppearanceSnapshot const* snapshot, ActorTrack const& track, bool winnerSide)
+    {
+        uint32 hardcodedFallback = GetHardcodedReplayNpcSilhouetteDisplay();
+        uint32 displayId = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.CreatureSilhouette.Display.Default", hardcodedFallback);
+
+        if (snapshot)
+        {
+            std::string const raceKey = GetReplayRaceToken(snapshot->race ? snapshot->race : track.race);
+            std::string const genderKey = GetReplayGenderToken(snapshot->gender);
+            std::string const classKey = GetReplayFallbackDisplayClassKey(snapshot->playerClass ? snapshot->playerClass : track.playerClass);
+
+            std::string const baseKey = "ArenaReplay.ActorVisual.CreatureSilhouette.Display.";
+            displayId = sConfigMgr->GetOption<uint32>(baseKey + raceKey + "." + genderKey + "." + classKey, displayId);
+            displayId = sConfigMgr->GetOption<uint32>(baseKey + raceKey + "." + genderKey, displayId);
+            displayId = sConfigMgr->GetOption<uint32>(baseKey + raceKey, displayId);
+        }
+
+        displayId = sConfigMgr->GetOption<uint32>(winnerSide ? "ArenaReplay.ActorVisual.CreatureSilhouette.Display.Team0" : "ArenaReplay.ActorVisual.CreatureSilhouette.Display.Team1", displayId);
+
+        if (IsKnownInvisibleReplayDisplay(displayId))
+            displayId = hardcodedFallback;
+
+        if (IsKnownInvisibleReplayDisplay(displayId))
+            return hardcodedFallback;
+
+        return displayId;
+    }
+
+    static uint32 ResolveCreatureSilhouetteDisplay(ReplayActorAppearanceSnapshot const* snapshot, ActorTrack const& track, bool winnerSide, char const*& reason)
+    {
+        uint32 playerDisplayId = snapshot ? (snapshot->displayId ? snapshot->displayId : snapshot->nativeDisplayId) : 0;
+        if (ReplayCreatureSilhouetteUsePlayerDisplayIds() && playerDisplayId != 0)
+        {
+            reason = "use_player_display_config";
+            return playerDisplayId;
+        }
+
+        if (snapshot && snapshot->shapeshiftDisplayId && snapshot->shapeshiftForm && !IsKnownInvisibleReplayDisplay(snapshot->shapeshiftDisplayId))
+        {
+            reason = "shapeshift_display";
+            return snapshot->shapeshiftDisplayId;
+        }
+
+        if (ReplayCreatureSilhouetteUseNpcRaceFallbackDisplays())
+        {
+            reason = "avoid_raw_player_display_on_creature";
+            return ResolveCreatureSilhouetteNpcDisplay(snapshot, track, winnerSide);
+        }
+
+        reason = "generic_fallback";
+        return ResolveVisibleReplayFallbackDisplay(track, winnerSide);
     }
 
     static ReplayActorVisualBackend GetReplayActorVisualBackend()
@@ -3197,7 +3318,9 @@ namespace
             if (!IsInvalidReplayCloneDisplay(originalDisplay, session))
                 continue;
 
-            uint32 repairedDisplay = ResolveVisibleReplayFallbackDisplay(*track, binding.winnerSide);
+            ReplayActorAppearanceSnapshot const* snapshot = FindReplayActorAppearanceSnapshot(match, binding.actorGuid);
+            char const* repairReason = "audit_repair";
+            uint32 repairedDisplay = ResolveCreatureSilhouetteDisplay(snapshot, *track, binding.winnerSide, repairReason);
             clone->SetNativeDisplayId(repairedDisplay);
             clone->SetDisplayId(repairedDisplay);
             clone->SetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + 0, 0);
@@ -4706,10 +4829,10 @@ namespace
         float smoothDeltaZ = 0.0f;
         if (sConfigMgr->GetOption<bool>("ArenaReplay.ActorSpectate.CameraSmoothing.Enable", true))
         {
-            float xyLerpPct = std::min(1.0f, std::max(0.01f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct", 0.35f)));
-            float zLerpPct = std::min(1.0f, std::max(0.01f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct", 0.08f)));
-            float zDeadband = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband", 0.75f));
-            float zSnapDistance = std::max(zDeadband, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance", 6.0f));
+            float xyLerpPct = std::min(1.0f, std::max(0.01f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct", 0.30f)));
+            float zLerpPct = std::min(1.0f, std::max(0.01f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct", 0.05f)));
+            float zDeadband = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband", 1.00f));
+            float zSnapDistance = std::max(zDeadband, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance", 8.0f));
 
             if (!session.hasSmoothedCamera || forceImmediate || actorChanged)
             {
@@ -4765,8 +4888,8 @@ namespace
                 float adz = anchor->GetPositionZ() - targetZ;
                 float anchorDistSq = adx * adx + ady * ady + adz * adz;
                 float anchorXYDistSq = adx * adx + ady * ady;
-                float minAnchorMoveDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance", 0.25f));
-                float minAnchorZMoveDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance", 0.50f));
+                float minAnchorMoveDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance", 0.35f));
+                float minAnchorZMoveDistance = std::max(0.0f, sConfigMgr->GetOption<float>("ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance", 0.75f));
                 uint32 minMoveMs = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs", 100u);
                 bool moveDue = minMoveMs == 0 || session.lastCameraMoveMs == 0 || nowMs >= session.lastCameraMoveMs + minMoveMs;
                 bool smallMoveExceeded = anchorXYDistSq > (minAnchorMoveDistance * minAnchorMoveDistance) || std::abs(adz) > minAnchorZMoveDistance;

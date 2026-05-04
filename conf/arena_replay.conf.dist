@@ -344,7 +344,7 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     Higher values rotate the camera faster toward the tracked
 #                     actor orientation. Lower values are smoother but looser.
 #
-#        Default:     0.35
+#        Default:     0.30
 #                     0.05 - Very soft rotation
 #                     1.00 - Immediate facing correction
 #
@@ -372,7 +372,7 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #
 #        Default:     0.45
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct = 0.35
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct = 0.30
 #                     Uses steady horizontal smoothing.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct
@@ -381,9 +381,9 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #
 #                     Keep lower than XY smoothing to reduce up/down bobbing.
 #
-#        Default:     0.08
+#        Default:     0.05
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct = 0.08
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct = 0.05
 #                     Uses heavy vertical smoothing.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband
@@ -392,9 +392,9 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     Small raw Z changes below this value do not move the
 #                     camera anchor.
 #
-#        Default:     0.75
+#        Default:     1.00
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband = 0.75
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband = 1.00
 #                     Ignores moderate vertical noise.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance
@@ -404,9 +404,9 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #                     This prevents smoothing from dragging through large,
 #                     legitimate height transitions such as Ring of Valor lifts.
 #
-#        Default:     6.0
+#        Default:     8.0
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance = 6.0
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance = 8.0
 #                     Snaps large vertical movement immediately.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs
@@ -437,18 +437,18 @@ ArenaReplay.Library.RecentlyWatched.RetentionDays = 90
 #        Description: Minimum horizontal distance, in yards, before a small
 #                     smoothed camera target moves the anchor.
 #
-#        Default:     0.25
+#        Default:     0.35
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance = 0.25
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance = 0.35
 #                     Skips imperceptibly small horizontal anchor moves.
 #
 #    ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance
 #        Description: Minimum vertical distance, in yards, before a small
 #                     smoothed camera target moves the anchor.
 #
-#        Default:     0.50
+#        Default:     0.75
 #
-#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.50
+#        Example:     ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.75
 #                     Skips imperceptibly small vertical anchor moves.
 #
 #    ArenaReplay.Playback.PacketBudgetPerUpdate
@@ -574,14 +574,14 @@ ArenaReplay.ActorSpectate.FollowHeight = 1.75
 ArenaReplay.ActorSpectate.SnapDistance = 1.10
 ArenaReplay.ActorSpectate.OrientationLerpPct = 0.45
 ArenaReplay.ActorSpectate.CameraSmoothing.Enable = 1
-ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct = 0.35
-ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct = 0.08
-ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband = 0.75
-ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance = 6.0
+ArenaReplay.ActorSpectate.CameraSmoothing.XYLerpPct = 0.30
+ArenaReplay.ActorSpectate.CameraSmoothing.ZLerpPct = 0.05
+ArenaReplay.ActorSpectate.CameraSmoothing.ZDeadband = 1.00
+ArenaReplay.ActorSpectate.CameraSmoothing.ZSnapDistance = 8.0
 ArenaReplay.ActorSpectate.CameraSmoothing.MinMoveMs = 100
 ArenaReplay.ActorSpectate.CameraSmoothing.UseClonePosition = 1
-ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance = 0.25
-ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.50
+ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorMoveDistance = 0.35
+ArenaReplay.ActorSpectate.CameraSmoothing.MinAnchorZMoveDistance = 0.75
 ArenaReplay.Playback.PacketBudgetPerUpdate = 40
 ArenaReplay.Playback.Mode = 1
 ArenaReplay.Playback.CloneMode.Enable = 1
@@ -620,6 +620,54 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #
 #        Example:     ArenaReplay.ActorVisual.Backend = 0
 #                     Uses stable creature silhouette replay bodies.
+#
+#    ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds
+#        Description: Controls whether creature silhouette actors apply raw
+#                     captured player display ids to Creature bodies.
+#
+#                     Keep disabled by default. Raw player display ids on
+#                     Creature objects can render as ghostly white/blue player
+#                     shells because creatures are not real player visual
+#                     containers. The captured player display ids are still
+#                     persisted for future player-body backends.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled for diagnostics only
+#
+#        Example:     ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds = 0
+#                     Uses textured creature fallback displays instead.
+#
+#    ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays
+#        Description: Uses safe textured creature/NPC display ids for creature
+#                     silhouette actors instead of raw player display ids.
+#
+#                     This does not reproduce exact armor or player
+#                     customization. It gives creature mode a stable,
+#                     non-broken temporary visual while preserving real
+#                     appearance data for future player-body backends.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays = 1
+#                     Uses configured creature/NPC fallback bodies.
+#
+#    ArenaReplay.ActorVisual.CreatureSilhouette.Display.*
+#        Description: Creature display ids used for textured silhouette bodies.
+#
+#                     Resolution order is:
+#                     Race.Gender.Class, Race.Gender, Race, Team0/Team1, then
+#                     Default. Unconfigured values fall back to Default.
+#
+#                     These must be valid textured CreatureDisplayID values, not
+#                     player display ids and not invisible trigger displays.
+#                     The distributed default uses the module's existing replay
+#                     actor creature display.
+#
+#        Default:     27800
+#
+#        Example:     ArenaReplay.ActorVisual.CreatureSilhouette.Display.Human.Male = 27800
+#                     Overrides the Human male silhouette body.
 #
 #    ArenaReplay.ActorVisual.PlayerBody.Enable
 #        Description: Enables the experimental player-body acquisition path.
@@ -694,6 +742,9 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #                     Future replay bodies are removed at replay end.
 #
 ArenaReplay.ActorVisual.Backend = 0
+ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds = 0
+ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays = 1
+ArenaReplay.ActorVisual.CreatureSilhouette.Display.Default = 27800
 ArenaReplay.ActorVisual.PlayerBody.Enable = 0
 ArenaReplay.ActorVisual.PlayerBody.AccountPrefix = rtgreplay
 ArenaReplay.ActorVisual.PlayerBody.Level = 19

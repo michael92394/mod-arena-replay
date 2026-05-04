@@ -1,21 +1,27 @@
 # Arena Replay Modernization 5.5.9
 
-## Chapter
-5.5.9 — Inline Appearance Persistence and Flightless Spectator Parking
+## Creature silhouette display hardening
 
-## Context
-Copied-instance clone playback now enters replay maps, spawns replay arena objects, hides the viewer body, and shows both teams as clone bindings. The latest tests showed actor appearance capture firing during join/sample/save, but playback still loaded `snapshotCount=0`, forcing every clone to fall back to the configured display. Tests also showed the spectator shell could still leave the viewer with `canFly=1` after teardown.
+- Creature silhouette backend now keeps captured player display ids in snapshots for future player-body backends, but it no longer applies raw player display ids to Creature bodies by default.
+- Added:
+  - `ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds = 0`
+  - `ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays = 1`
+  - `ArenaReplay.ActorVisual.CreatureSilhouette.Display.Default = 27800`
+- Display resolution supports future tuning by race, gender, class, and team. Unconfigured actors fall back to the module's textured replay actor creature display.
+- New `CREATURE_SILHOUETTE_DISPLAY` logs show the captured player display id and the fallback creature display selected for replay.
+- Weapon item-entry application is unchanged and remains the correct short-term way to show held weapons in creature mode.
 
-## Changes
-- Added optional inline `actorAppearanceSnapshots` storage on `character_arena_replays` so appearance data is saved with the replay row itself instead of depending only on the side table and replay id timing.
-- Added serialization/deserialization for actor appearance snapshots and load-time merge with the existing side table.
-- Added schema detection for the inline column and clear logs for inline schema/load/persist behavior.
-- Added a fallback replay id lookup by match metadata before side-table persistence, so `LAST_INSERT_ID()` connection timing failures no longer silently skip side-table snapshot persistence.
-- Updated spectator shell parking and fixed camera fallback to respect `ArenaReplay.SpectatorShell.UseFlightForParking = 0`, avoiding replay-created fly/no-gravity/hover flags during normal clone-mode viewing.
-- Added a character DB update to add the inline snapshot column.
+## Camera smoothing
 
-## Expected Proof
-Fresh replay save should log snapshot capture, inline persist/save availability, and either side-table persistence with a valid replay id or inline snapshot availability. Playback should log `APPEARANCE_LOAD_INLINE snapshotCount > 0` and clones should use `source=snapshot` instead of `source=fallback`.
+- Camera smoothing defaults were tightened again to reduce vertical bobbing:
+  - XY lerp 0.30
+  - Z lerp 0.05
+  - Z deadband 1.00
+  - Z snap distance 8.0
+  - minimum anchor XY move 0.35
+  - minimum anchor Z move 0.75
+- The camera still prefers the visible clone position when available and only falls back to raw actor frame position when the clone is missing.
 
-## Notes
-Old replays without inline or side-table snapshots will still use generic fallback displays. New tests must use a freshly recorded match after this patch and after the character DB update has been applied.
+## Backend direction
+
+The white/blue body issue is now treated as a visual backend limitation, not a snapshot bug. Creature silhouettes should look stable and non-broken, while the experimental player-body backend remains the path toward real player armor/customization fidelity.
