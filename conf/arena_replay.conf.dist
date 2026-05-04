@@ -691,6 +691,31 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #
 #        Example:     ArenaReplay.ActorVisual.RecordedPacketStream.FilterDestroyObjectPackets = 1
 #
+#    ArenaReplay.ActorVisual.RecordedPacketStream.RemapViewerGuid
+#        Description: Rewrites recorded packets that reference the live viewer's
+#                     original player GUID to a session-local replay visual GUID.
+#                     This prevents the client's real hidden viewer object from
+#                     being mutated by replay packets, which previously caused
+#                     floating weapon/sword artifacts and dirty exit state when
+#                     watching a replay that included the current character.
+#
+#        Default:     1 - Enabled
+#                     0 - Do not rewrite viewer GUID references
+#
+#        Example:     ArenaReplay.ActorVisual.RecordedPacketStream.RemapViewerGuid = 1
+#
+#    ArenaReplay.ActorVisual.RecordedPacketStream.SkipUnmappedViewerGuidPackets
+#        Description: Safety valve used after GUID remapping. If a packet still
+#                     contains the live viewer GUID in a representation the module
+#                     cannot rewrite safely, skip that packet instead of allowing
+#                     it to corrupt the hidden viewer shell. This may omit a few
+#                     self-perspective updates, but it protects clean teardown.
+#
+#        Default:     1 - Enabled
+#                     0 - Send packets even if the live viewer GUID remains
+#
+#        Example:     ArenaReplay.ActorVisual.RecordedPacketStream.SkipUnmappedViewerGuidPackets = 1
+#
 #    ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds
 #        Description: Controls whether creature silhouette actors apply raw
 #                     captured player display ids to Creature bodies.
@@ -843,6 +868,8 @@ ArenaReplay.ActorVisual.RecordedPacketStream.RecordAllParticipantPackets = 1
 ArenaReplay.ActorVisual.RecordedPacketStream.MaxPacketsPerReplay = 25000
 ArenaReplay.ActorVisual.RecordedPacketStream.RequirePackets = 1
 ArenaReplay.ActorVisual.RecordedPacketStream.FilterDestroyObjectPackets = 1
+ArenaReplay.ActorVisual.RecordedPacketStream.RemapViewerGuid = 1
+ArenaReplay.ActorVisual.RecordedPacketStream.SkipUnmappedViewerGuidPackets = 1
 ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds = 0
 ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays = 1
 ArenaReplay.ActorVisual.CreatureSilhouette.Display.Default = 27800

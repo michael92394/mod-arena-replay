@@ -23,8 +23,10 @@
 #include "ScriptMgr.h"
 #include "ChatCommand.h"
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
+#include <cstring>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -312,6 +314,11 @@ struct ActiveReplaySession
     bool invisibleDisplayApplied = false;
     uint32 priorVirtualItemSlot[3] = { 0, 0, 0 };
     bool virtualItemsStripped = false;
+    uint64 viewerReplayVisualGuidRaw = 0;
+    uint32 viewerGuidRemapPacketCount = 0;
+    uint32 viewerGuidSkipPacketCount = 0;
+    bool viewerGuidRemapLogged = false;
+    bool viewerGuidSkipLogged = false;
     float lastCameraX = 0.0f;
     float lastCameraY = 0.0f;
     float lastCameraZ = 0.0f;
@@ -1174,6 +1181,152 @@ namespace
                 return false;
         }
 
+        return true;
+    }
+
+
+    static std::vector<uint8> ReplayGuidRawBytes(uint64 raw)
+    {
+        std::vector<uint8> out(8, 0);
+        for (uint8 i = 0; i < 8; ++i)
+            out[i] = uint8((raw >> (i * 8)) & 0xFF);
+        return out;
+    }
+
+    static std::vector<uint8> ReplayGuidPackedBytes(uint64 raw)
+    {
+        std::vector<uint8> out;
+        uint8 mask = 0;
+        std::array<uint8, 8> bytes{};
+        for (uint8 i = 0; i < 8; ++i)
+        {
+            bytes[i] = uint8((raw >> (i * 8)) & 0xFF);
+            if (bytes[i] != 0)
+                mask |= uint8(1u << i);
+        }
+
+        out.push_back(mask);
+        for (uint8 i = 0; i < 8; ++i)
+        {
+            if (mask & uint8(1u << i))
+                out.push_back(bytes[i]);
+        }
+        return out;
+    }
+
+    static uint64 MakeReplayViewerVisualGuidRaw(uint64 raw)
+    {
+        for (uint8 i = 0; i < 8; ++i)
+        {
+            uint64 shift = uint64(i) * 8u;
+            uint8 b = uint8((raw >> shift) & 0xFF);
+            if (b != 0 && b != 0x80)
+                return raw ^ (uint64(0x80) << shift);
+        }
+
+        return raw ^ uint64(0x01);
+    }
+
+    static uint32 ReplaceReplayPacketBytes(std::vector<uint8>& data, std::vector<uint8> const& from, std::vector<uint8> const& to)
+    {
+        if (from.empty() || from.size() != to.size() || data.size() < from.size())
+            return 0;
+
+        uint32 replacements = 0;
+        for (size_t i = 0; i + from.size() <= data.size(); ++i)
+        {
+            if (std::memcmp(data.data() + i, from.data(), from.size()) != 0)
+                continue;
+
+            std::memcpy(data.data() + i, to.data(), to.size());
+            ++replacements;
+            i += from.size() - 1;
+        }
+        return replacements;
+    }
+
+    static bool ReplayPacketContainsBytes(std::vector<uint8> const& data, std::vector<uint8> const& needle)
+    {
+        if (needle.empty() || data.size() < needle.size())
+            return false;
+
+        for (size_t i = 0; i + needle.size() <= data.size(); ++i)
+        {
+            if (std::memcmp(data.data() + i, needle.data(), needle.size()) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    static bool BuildViewerSafeReplayPacket(WorldPacket const& source, Player* viewer, ActiveReplaySession& session, WorldPacket& out)
+    {
+        if (!viewer || !ReplayRecordedPacketVisualBackendEnabled())
+        {
+            out = WorldPacket(source);
+            return true;
+        }
+
+        std::vector<uint8> data;
+        if (source.size() > 0)
+        {
+            data.resize(source.size());
+            std::memcpy(data.data(), source.contents(), source.size());
+        }
+
+        uint64 viewerRaw = viewer->GetGUID().GetRawValue();
+        std::vector<uint8> oldRaw = ReplayGuidRawBytes(viewerRaw);
+        std::vector<uint8> oldPacked = ReplayGuidPackedBytes(viewerRaw);
+        uint32 replacements = 0;
+
+        if (sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.RecordedPacketStream.RemapViewerGuid", true))
+        {
+            if (session.viewerReplayVisualGuidRaw == 0)
+                session.viewerReplayVisualGuidRaw = MakeReplayViewerVisualGuidRaw(viewerRaw);
+
+            uint64 fakeRaw = session.viewerReplayVisualGuidRaw;
+            std::vector<uint8> newRaw = ReplayGuidRawBytes(fakeRaw);
+            std::vector<uint8> newPacked = ReplayGuidPackedBytes(fakeRaw);
+
+            if (newPacked.size() == oldPacked.size())
+                replacements += ReplaceReplayPacketBytes(data, oldPacked, newPacked);
+            replacements += ReplaceReplayPacketBytes(data, oldRaw, newRaw);
+        }
+
+        bool stillContainsViewerGuid = ReplayPacketContainsBytes(data, oldPacked) || ReplayPacketContainsBytes(data, oldRaw);
+        if (stillContainsViewerGuid && sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.RecordedPacketStream.SkipUnmappedViewerGuidPackets", true))
+        {
+            ++session.viewerGuidSkipPacketCount;
+            if (!session.viewerGuidSkipLogged || ReplayDebugVerbose())
+            {
+                LOG_WARN("server.loading", "[RTG][REPLAY][PACKET_VIEWER_GUID_SKIP] replay={} viewerGuid={} opcode={} skipped={} reason=unmapped_viewer_guid result=skip",
+                    session.replayId,
+                    viewer->GetGUID().GetCounter(),
+                    uint32(source.GetOpcode()),
+                    session.viewerGuidSkipPacketCount);
+                session.viewerGuidSkipLogged = true;
+            }
+            return false;
+        }
+
+        if (replacements != 0)
+        {
+            session.viewerGuidRemapPacketCount += replacements;
+            if (!session.viewerGuidRemapLogged || ReplayDebugVerbose())
+            {
+                LOG_INFO("server.loading", "[RTG][REPLAY][PACKET_VIEWER_GUID_REMAP] replay={} viewerGuid={} fakeRaw={} opcode={} replacements={} totalReplacements={} result=ok",
+                    session.replayId,
+                    viewer->GetGUID().GetCounter(),
+                    session.viewerReplayVisualGuidRaw,
+                    uint32(source.GetOpcode()),
+                    replacements,
+                    session.viewerGuidRemapPacketCount);
+                session.viewerGuidRemapLogged = true;
+            }
+        }
+
+        out = WorldPacket(source.GetOpcode(), data.size());
+        if (!data.empty())
+            out.append(data.data(), data.size());
         return true;
     }
 
@@ -4747,6 +4900,15 @@ namespace
             ReplayLog(ReplayDebugFlag::Return, &session, player, "RETURN_STATE", ss.str());
         }
 
+        if (session.viewerGuidRemapPacketCount != 0 || session.viewerGuidSkipPacketCount != 0)
+        {
+            LOG_INFO("server.loading", "[RTG][REPLAY][PACKET_VIEWER_GUID_SUMMARY] replay={} viewerGuid={} remapReplacements={} skippedPackets={} result=teardown",
+                session.replayId,
+                player->GetGUID().GetCounter(),
+                session.viewerGuidRemapPacketCount,
+                session.viewerGuidSkipPacketCount);
+        }
+
         activeReplaySessions.erase(viewerKey);
     }
 
@@ -4886,9 +5048,10 @@ namespace
         }
 
         uint64 const viewerActorGuid = replayer->GetGUID().GetRawValue();
-        Creature* selectedClone = FindReplayClone(replayer, session, track->guid);
+        bool packetVisualBackend = ReplayRecordedPacketVisualBackendEnabled();
+        Creature* selectedClone = packetVisualBackend ? nullptr : FindReplayClone(replayer, session, track->guid);
         bool selectedSelf = track->guid == viewerActorGuid;
-        if (selectedSelf && !selectedClone)
+        if (selectedSelf && !selectedClone && !packetVisualBackend)
         {
             uint32 fallbackFlatIndex = flatIndex;
             if (ActorTrack const* fallbackTrack = SelectFirstReplayActorWithClone(replayer, match, session, viewerActorGuid, &fallbackFlatIndex))
@@ -5225,6 +5388,11 @@ namespace
         session.priorVirtualItemSlot[1] = player->GetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + 1);
         session.priorVirtualItemSlot[2] = player->GetUInt32Value(UNIT_VIRTUAL_ITEM_SLOT_ID + 2);
         session.virtualItemsStripped = false;
+        session.viewerReplayVisualGuidRaw = 0;
+        session.viewerGuidRemapPacketCount = 0;
+        session.viewerGuidSkipPacketCount = 0;
+        session.viewerGuidRemapLogged = false;
+        session.viewerGuidSkipLogged = false;
         session.lastCameraX = player->GetPositionX();
         session.lastCameraY = player->GetPositionY();
         session.lastCameraZ = player->GetPositionZ();
@@ -5608,8 +5776,12 @@ public:
             WorldPacket* myPacket = &match.packets.front().packet;
             if (IsReplayPacketOpcodeAllowedForPlayback(myPacket->GetOpcode()))
             {
-                replayer->GetSession()->SendPacket(myPacket);
-                ++packetsSentThisUpdate;
+                WorldPacket safePacket;
+                if (BuildViewerSafeReplayPacket(*myPacket, replayer, session, safePacket))
+                {
+                    replayer->GetSession()->SendPacket(&safePacket);
+                    ++packetsSentThisUpdate;
+                }
             }
             match.packets.pop_front();
         }
@@ -7200,8 +7372,12 @@ namespace
                 WorldPacket* myPacket = &match.packets.front().packet;
                 if (IsReplayPacketOpcodeAllowedForPlayback(myPacket->GetOpcode()))
                 {
-                    replayer->GetSession()->SendPacket(myPacket);
-                    ++packetsSentThisUpdate;
+                    WorldPacket safePacket;
+                    if (BuildViewerSafeReplayPacket(*myPacket, replayer, session, safePacket))
+                    {
+                        replayer->GetSession()->SendPacket(&safePacket);
+                        ++packetsSentThisUpdate;
+                    }
                 }
                 match.packets.pop_front();
             }
