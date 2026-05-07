@@ -2885,6 +2885,24 @@ namespace
         return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays", true);
     }
 
+    static uint32 ReplaySyntheticFallbackDisplayId()
+    {
+        // Keep the first Option-C UNIT smoke tests independent from the large
+        // creature-silhouette display resolver. The resolver is useful later,
+        // but it causes active-config spam and can still choose player-shaped
+        // displays. This single, known-visible fallback keeps synthetic actors
+        // easy to validate: create, move, destroy.
+        uint32 display = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId", 27800u);
+        if (!display || IsKnownInvisibleReplayDisplay(display))
+            display = 27800u;
+        return display;
+    }
+
+    static bool ReplaySyntheticUseCreatureSilhouetteFallbackResolver()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseCreatureSilhouetteFallbackResolver", false);
+    }
+
     static void LogSyntheticReplayPacketEmitterPlan(Player* viewer, MatchRecord const& match, ActiveReplaySession& session)
     {
         bool emitterEnabled = sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Enable", true);
@@ -3055,11 +3073,18 @@ namespace
 
         if (ReplaySyntheticUseNpcRaceFallbackDisplays())
         {
-            reason = "npc_race_fallback";
-            return ResolveCreatureSilhouetteNpcDisplay(snapshot, track, winnerSide);
+            if (ReplaySyntheticUseCreatureSilhouetteFallbackResolver())
+            {
+                reason = "npc_race_fallback_resolver";
+                return ResolveCreatureSilhouetteNpcDisplay(snapshot, track, winnerSide);
+            }
+
+            reason = "synthetic_stable_fallback";
+            return ReplaySyntheticFallbackDisplayId();
         }
 
-        return ResolveCreatureSilhouetteDisplay(snapshot, track, winnerSide, reason);
+        reason = "synthetic_stable_fallback";
+        return ReplaySyntheticFallbackDisplayId();
     }
 
     static void BuildSyntheticReplayUnitValues(std::vector<std::pair<uint16, uint32>>& values, uint64 visualGuid, ActorTrack const& track, ReplayActorAppearanceSnapshot const* snapshot, bool winnerSide)
@@ -3099,6 +3124,11 @@ namespace
         values.push_back({58, ranged});                                         // UNIT_VIRTUAL_ITEM_SLOT_ID 2
         values.push_back({59, unitFlags});                                      // UNIT_FIELD_FLAGS
         values.push_back({60, unitFlags2});                                     // UNIT_FIELD_FLAGS_2
+        values.push_back({62, sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BaseAttackTime", 2000u)}); // UNIT_FIELD_BASEATTACKTIME
+        values.push_back({63, sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BaseAttackTime", 2000u)}); // UNIT_FIELD_BASEATTACKTIME offhand
+        values.push_back({64, sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.RangedAttackTime", 2000u)}); // UNIT_FIELD_RANGEDATTACKTIME
+        values.push_back({65, FloatToUpdateUInt32(sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BoundingRadius", 0.3889999986f))}); // UNIT_FIELD_BOUNDINGRADIUS
+        values.push_back({66, FloatToUpdateUInt32(sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.CombatReach", 1.5f))}); // UNIT_FIELD_COMBATREACH
         values.push_back({67, displayId});                                      // UNIT_FIELD_DISPLAYID
         values.push_back({68, nativeDisplayId});                                // UNIT_FIELD_NATIVEDISPLAYID
         values.push_back({74, 0u});                                             // UNIT_FIELD_BYTES_1
@@ -3112,7 +3142,7 @@ namespace
         // Minimal non-living position block. This is intentionally safer than a
         // living movement block because it cannot assign active mover/control to
         // the viewer client.
-        packet << uint16(0x0040); // UPDATEFLAG_HAS_POSITION
+        packet << uint8(0x40); // UPDATEFLAG_HAS_POSITION / stationary position (one byte in 3.3.5 update blocks)
         packet << frame.x << frame.y << frame.z << frame.o;
     }
 
@@ -4452,6 +4482,14 @@ namespace
         return sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.Debug", false);
     }
 
+    static bool ReplayDalaranWaterAllowedForCurrentBackend()
+    {
+        if (GetReplayActorVisualBackend() == RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL)
+            return sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.DalaranWater.EnableInSyntheticBackend", false);
+
+        return true;
+    }
+
     static uint32 SecondsToMs(uint32 seconds)
     {
         return seconds * IN_MILLISECONDS;
@@ -4575,7 +4613,7 @@ namespace
             return false;
 
         if ((def.role == RTG_REPLAY_OBJECT_DS_WATER_COLLISION || def.role == RTG_REPLAY_OBJECT_DS_WATER_VISUAL) &&
-            !sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.DalaranWater.Enable", true))
+            (!sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.DalaranWater.Enable", true) || !ReplayDalaranWaterAllowedForCurrentBackend()))
             return false;
 
         if (def.role == RTG_REPLAY_OBJECT_DS_WATER_COLLISION &&
@@ -4870,7 +4908,7 @@ namespace
         if (startWithGatesOpen && session.replayPlaybackMs >= GetReplayGateOpenRawMs(session) && !SetReplayDynamicObjectsByRole(viewer, session, RTG_REPLAY_OBJECT_GATE, true))
             return false;
 
-        if (session.nativeMapId == 617 && sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.DalaranWater.Enable", true))
+        if (session.nativeMapId == 617 && sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.DalaranWater.Enable", true) && ReplayDalaranWaterAllowedForCurrentBackend())
         {
             session.dsWaterState = 0;
             session.dsWaterCycle = 0;
@@ -4937,7 +4975,7 @@ namespace
 
     static void UpdateDalaranReplayWater(Player* viewer, ActiveReplaySession& session)
     {
-        if (session.nativeMapId != 617 || !sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.DalaranWater.Enable", true))
+        if (session.nativeMapId != 617 || !sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.DalaranWater.Enable", true) || !ReplayDalaranWaterAllowedForCurrentBackend())
             return;
 
         uint32 warningMs = SecondsToMs(sConfigMgr->GetOption<uint32>("ArenaReplay.ReplayObjects.DalaranWater.WarningSeconds", 5u));

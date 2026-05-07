@@ -713,14 +713,39 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 0
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseNpcRaceFallbackDisplays
-#        Description: Uses stable textured NPC/race fallback displays for the first synthetic UNIT test.
-#                     This favors safe visible actors over exact player armor until the future
-#                     synthetic PLAYER-object emitter is implemented.
+#        Description: Uses a stable textured fallback display for the first
+#                     synthetic UNIT test. By default this no longer calls the
+#                     larger creature-silhouette resolver because that resolver
+#                     can spam missing config warnings and can still choose
+#                     actor-specific displays that are harder to validate.
 #
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseNpcRaceFallbackDisplays = 1
+#
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId
+#        Description: Known-visible display used by the first synthetic UNIT
+#                     smoke-test path when player display IDs are disabled.
+#                     This should be a stable textured creature/NPC display, not
+#                     an invisible trigger and not a raw player customization
+#                     display. The first goal is proving UNIT create/move/destroy
+#                     visibility, not perfect player armor.
+#
+#        Default:     27800
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId = 27800
+#
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseCreatureSilhouetteFallbackResolver
+#        Description: Allows the synthetic backend to reuse the older
+#                     race/gender/class creature-silhouette display resolver.
+#                     Keep disabled during Option C smoke tests to avoid active
+#                     config spam and isolate packet-visibility issues.
+#
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseCreatureSilhouetteFallbackResolver = 0
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays
 #        Description: Allows captured shapeshift display IDs to override fallback displays when present.
@@ -738,6 +763,22 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Default:     33555202
 #
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags = 33555202
+#
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BoundingRadius
+#        Description: UNIT_FIELD_BOUNDINGRADIUS for synthetic UNIT visuals.
+#                     Sent during create so the client has sane unit geometry.
+#
+#        Default:     0.389
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BoundingRadius = 0.389
+#
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.CombatReach
+#        Description: UNIT_FIELD_COMBATREACH for synthetic UNIT visuals.
+#                     Sent during create so the client has sane unit geometry.
+#
+#        Default:     1.5
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.CombatReach = 1.5
 #
 #    ArenaReplay.ActorVisual.RecordedPacketStream.Enable
 #        Description: Enables recorded-packet visual mode only when
@@ -990,12 +1031,18 @@ ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitEntry = 98501
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.GuidLowBase = 14680064
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseNpcRaceFallbackDisplays = 1
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId = 27800
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseCreatureSilhouetteFallbackResolver = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags = 33555202
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags2 = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Faction = 35
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Level = 19
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Health = 100
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BaseAttackTime = 2000
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.RangedAttackTime = 2000
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BoundingRadius = 0.389
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.CombatReach = 1.5
 ArenaReplay.ActorVisual.RecordedPacketStream.Enable = 0
 ArenaReplay.ActorVisual.RecordedPacketStream.RecordAllParticipantPackets = 1
 ArenaReplay.ActorVisual.RecordedPacketStream.MaxPacketsPerReplay = 25000
@@ -1507,6 +1554,19 @@ ArenaReplay.ReplayMap.RequireResolved = 1
 #        Example:     ArenaReplay.ReplayObjects.DalaranWater.Enable = 1
 #                     Dalaran water visuals are session-spawned and timed.
 #
+#    ArenaReplay.ReplayObjects.DalaranWater.EnableInSyntheticBackend
+#        Description: Allows synthetic Option C playback to show the generated
+#                     Dalaran Sewers waterfall timeline. Disabled by default
+#                     because Option C currently does not record real BattlegroundDS
+#                     water events, and a synthetic waterfall can visibly disagree
+#                     with the actual match pathing.
+#
+#        Default:     0 - Disabled in synthetic backend
+#                     1 - Enabled in synthetic backend
+#
+#        Example:     ArenaReplay.ReplayObjects.DalaranWater.EnableInSyntheticBackend = 0
+#                     Keeps Dalaran water off until real event recording exists.
+#
 #    ArenaReplay.ReplayObjects.DalaranWater.CollisionEnable
 #        Description: Spawns the Dalaran Sewers waterfall collision object.
 #
@@ -1654,6 +1714,7 @@ ArenaReplay.ReplayObjects.OpenGatesAtMatchOpen = 1
 ArenaReplay.ReplayObjects.GateOpenDelayMs = 0
 ArenaReplay.ReplayObjects.BuffDelaySeconds = 90
 ArenaReplay.ReplayObjects.DalaranWater.Enable = 1
+ArenaReplay.ReplayObjects.DalaranWater.EnableInSyntheticBackend = 0
 ArenaReplay.ReplayObjects.DalaranWater.CollisionEnable = 0
 ArenaReplay.ReplayObjects.DalaranWater.CollisionRequired = 0
 ArenaReplay.ReplayObjects.DalaranWater.RandomizeLikeLive = 1
