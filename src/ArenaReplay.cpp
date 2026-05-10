@@ -4026,9 +4026,24 @@ namespace
         return delayMs;
     }
 
+    static uint32 GetReplayBuffDelayMs()
+    {
+        return SecondsToMs(sConfigMgr->GetOption<uint32>("ArenaReplay.ReplayObjects.BuffDelaySeconds", 90u));
+    }
+
+    static uint32 GetReplayBuffActivateVisibleMs()
+    {
+        return GetReplayBuffDelayMs();
+    }
+
+    static uint32 GetReplayBuffActivatePlaybackMs(ActiveReplaySession const& session)
+    {
+        return session.matchOpenMs + GetReplayBuffDelayMs();
+    }
+
     static uint32 GetReplayBuffActivateRawMs(ActiveReplaySession const& session)
     {
-        return session.matchOpenMs + SecondsToMs(sConfigMgr->GetOption<uint32>("ArenaReplay.ReplayObjects.BuffDelaySeconds", 90u));
+        return GetReplayBuffActivatePlaybackMs(session);
     }
 
     static char const* GetReplayGateStateName(ActiveReplaySession const& session)
@@ -4092,11 +4107,10 @@ namespace
         session.cloneTimelineInitialized = true;
 
         uint32 gateOpenMs = ReplayCloneModeTrimPreMatchDeadAir() ? 0 : GetReplayGateOpenRawMs(session);
-        uint32 buffActivateMs = ReplayCloneModeTrimPreMatchDeadAir()
-            ? SecondsToMs(sConfigMgr->GetOption<uint32>("ArenaReplay.ReplayObjects.BuffDelaySeconds", 90u))
-            : GetReplayBuffActivateRawMs(session);
+        uint32 buffActivateVisibleMs = GetReplayBuffActivateVisibleMs();
+        uint32 buffActivatePlaybackMs = GetReplayBuffActivatePlaybackMs(session);
 
-        LOG_INFO("server.loading", "[RTG][REPLAY][SCENE_TIMELINE] replay={} nativeMap={} replayMap={} packetStartMs={} firstPlayableActorFrameMs={} cloneSceneStartMs={} trimPreMatchDeadAir={} gateOpenMs={} buffActivateMs={} actorCount={} team0Count={} team1Count={}",
+        LOG_INFO("server.loading", "[RTG][REPLAY][SCENE_TIMELINE] replay={} nativeMap={} replayMap={} packetStartMs={} firstPlayableActorFrameMs={} cloneSceneStartMs={} trimPreMatchDeadAir={} gateOpenMs={} buffActivateMs={} buffActivatePlaybackMs={} actorCount={} team0Count={} team1Count={}",
             session.replayId,
             session.nativeMapId,
             session.replayMapId,
@@ -4105,7 +4119,8 @@ namespace
             session.cloneSceneStartMs,
             ReplayCloneModeTrimPreMatchDeadAir() ? 1 : 0,
             gateOpenMs,
-            buffActivateMs,
+            buffActivateVisibleMs,
+            buffActivatePlaybackMs,
             actorCount,
             team0Count,
             team1Count);
@@ -4946,6 +4961,7 @@ namespace
             }
         }
 
+        uint32 spawnedOnActivation = 0;
         if (!hasRoleBinding && active && role == RTG_REPLAY_OBJECT_BUFF && ReplayBuffObjectsSpawnOnlyOnActivation())
         {
             for (ReplayDynamicObjectTemplate const& def : ReplayDynamicObjectTemplates)
@@ -4955,6 +4971,23 @@ namespace
 
                 if (!SpawnReplayDynamicObjectFromTemplate(viewer, session, def, true, "activate_spawn"))
                     ok = false;
+                else
+                    ++spawnedOnActivation;
+            }
+
+            if (spawnedOnActivation != 0)
+            {
+                LOG_INFO("server.loading", "[RTG][REPLAY][BUFF_OBJECT_ACTIVATE] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} spawned={} replayPlaybackMs={} matchElapsedMs={} activateVisibleMs={} activatePlaybackMs={} result=ok",
+                    session.replayId,
+                    viewer ? viewer->GetGUID().GetCounter() : 0,
+                    session.nativeMapId,
+                    session.replayMapId,
+                    session.replayPhaseMask,
+                    spawnedOnActivation,
+                    session.replayPlaybackMs,
+                    GetReplayMatchElapsedMs(session),
+                    GetReplayBuffActivateVisibleMs(),
+                    GetReplayBuffActivatePlaybackMs(session));
             }
         }
 
@@ -5104,14 +5137,15 @@ namespace
         session.replayObjectsSpawned = true;
         if (delayedBuffs != 0)
         {
-            LOG_INFO("server.loading", "[RTG][REPLAY][BUFF_OBJECT_DELAY] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} delayedBuffs={} activateMs={} result=spawn_on_activation",
+            LOG_INFO("server.loading", "[RTG][REPLAY][BUFF_OBJECT_DELAY] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} delayedBuffs={} activateVisibleMs={} activatePlaybackMs={} result=spawn_on_activation",
                 session.replayId,
                 viewer ? viewer->GetGUID().GetCounter() : 0,
                 session.nativeMapId,
                 session.replayMapId,
                 session.replayPhaseMask,
                 delayedBuffs,
-                GetReplayBuffActivateRawMs(session));
+                GetReplayBuffActivateVisibleMs(),
+                GetReplayBuffActivatePlaybackMs(session));
         }
         LogRingReplayObjectSummary(session, viewer);
         return !hardFailure;
@@ -5303,7 +5337,7 @@ namespace
         if (session.replayPlaybackMs >= GetReplayGateOpenRawMs(session))
             SetReplayDynamicObjectsByRole(viewer, session, RTG_REPLAY_OBJECT_GATE, true);
 
-        if (session.replayPlaybackMs >= GetReplayBuffActivateRawMs(session))
+        if (GetReplayMatchElapsedMs(session) >= GetReplayBuffActivateVisibleMs())
             SetReplayDynamicObjectsByRole(viewer, session, RTG_REPLAY_OBJECT_BUFF, true);
 
         UpdateDalaranReplayWater(viewer, session);

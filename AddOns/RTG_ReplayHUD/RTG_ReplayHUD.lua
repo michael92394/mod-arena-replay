@@ -388,6 +388,17 @@ local function ApplyWatchers(payload)
     UpdateWatchers()
 end
 
+local function IsReplaySystemPayload(msg)
+    return type(msg) == "string" and msg:match("^%[RTG_REPLAY%]%s*") ~= nil
+end
+
+local function ReplaySystemMessageFilter(_, _, msg)
+    if IsReplaySystemPayload(msg) then
+        return true
+    end
+    return false
+end
+
 local function HandleMessage(msg)
     local cmd, payload = msg:match("^(.-)|(.+)$")
     if not cmd then
@@ -439,6 +450,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             elseif RegisterAddonMessagePrefix then
                 RegisterAddonMessagePrefix(PREFIX)
             end
+            if ChatFrame_AddMessageEventFilter then
+                ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", ReplaySystemMessageFilter)
+            end
             ApplySavedPosition()
         end
     elseif event == "PLAYER_LOGIN" then
@@ -455,9 +469,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         HandleMessage(msg or "")
     elseif event == "CHAT_MSG_SYSTEM" then
         local msg = ...
-        local payload = msg and msg:match("^%[RTG_REPLAY%]%s*(.+)$")
-        if payload and payload ~= "" then
-            HandleMessage(payload)
+        if IsReplaySystemPayload(msg) then
+            local payload = msg:match("^%[RTG_REPLAY%]%s*(.+)$")
+            if payload and payload ~= "" then
+                HandleMessage(payload)
+            end
         end
     end
 end)
