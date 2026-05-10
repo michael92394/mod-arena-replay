@@ -239,6 +239,7 @@ struct ActiveReplaySession
     uint32 replayId = 0;
     uint32 anchorMapId = 0;
     Position anchorPosition;
+    bool anchorCaptured = false;
     uint32 nextAnchorEnforceMs = 0;
     bool movementLocked = false;
     bool viewerWasParticipant = false;
@@ -1745,13 +1746,28 @@ namespace
         return mapId == 725 || mapId == 726 || mapId == 727 || mapId == 728 || mapId == 729;
     }
 
-    static void GetReplaySafeFallbackPosition(uint32& mapId, float& x, float& y, float& z, float& o)
+    static bool IsAllianceReplayViewer(Player const* player)
     {
-        mapId = sConfigMgr->GetOption<uint32>("ArenaReplay.Return.SafeFallbackMap", 1u);
-        x = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackX", 1629.85f);
-        y = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackY", -4373.64f);
-        z = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackZ", 31.5573f);
-        o = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackO", 3.69762f);
+        return player && player->GetTeamId() == TEAM_ALLIANCE;
+    }
+
+    static void GetReplaySafeFallbackPosition(Player const* player, uint32& mapId, float& x, float& y, float& z, float& o)
+    {
+        if (IsAllianceReplayViewer(player))
+        {
+            mapId = sConfigMgr->GetOption<uint32>("ArenaReplay.Return.SafeFallbackAllianceMap", 0u);
+            x = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackAllianceX", -8833.38f);
+            y = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackAllianceY", 628.628f);
+            z = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackAllianceZ", 94.0066f);
+            o = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackAllianceO", 1.06535f);
+            return;
+        }
+
+        mapId = sConfigMgr->GetOption<uint32>("ArenaReplay.Return.SafeFallbackHordeMap", 1u);
+        x = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackHordeX", 1629.85f);
+        y = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackHordeY", -4373.64f);
+        z = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackHordeZ", 31.5573f);
+        o = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackHordeO", 3.69762f);
     }
 
     static bool ReturnReplayViewerToAnchor(Player* player, ActiveReplaySession const& session)
@@ -1766,14 +1782,14 @@ namespace
         float o = session.anchorPosition.GetOrientation();
 
         char const* returnSource = "anchor";
-        if (anchorMap == 0 || (IsCopiedReplayMapId(anchorMap) && sConfigMgr->GetOption<bool>("ArenaReplay.Return.UseFallbackWhenAnchorIsReplayMap", true)))
+        if (!session.anchorCaptured || (IsCopiedReplayMapId(anchorMap) && sConfigMgr->GetOption<bool>("ArenaReplay.Return.UseFallbackWhenAnchorIsReplayMap", true)))
         {
-            GetReplaySafeFallbackPosition(anchorMap, x, y, z, o);
-            returnSource = session.anchorMapId == 0 ? "fallback_no_anchor" : "fallback_anchor_was_replay_map";
+            GetReplaySafeFallbackPosition(player, anchorMap, x, y, z, o);
+            returnSource = !session.anchorCaptured ? "fallback_no_anchor" : "fallback_anchor_was_replay_map";
         }
 
         uint32 playerMapBefore = player->GetMapId();
-        bool teleportOk = anchorMap != 0 && player->TeleportTo(anchorMap, x, y, z, o);
+        bool teleportOk = player->TeleportTo(anchorMap, x, y, z, o);
         LOG_INFO("server.loading", "[RTG][REPLAY][RETURN_TELEPORT] replay={} viewerGuid={} nativeMap={} replayMap={} source={} targetMap={} x={} y={} z={} o={} playerMapBefore={} result={}",
             session.replayId,
             player->GetGUID().GetCounter(),
@@ -1791,8 +1807,8 @@ namespace
         bool alreadyUsingNoAnchorFallback = std::strcmp(returnSource, "fallback_no_anchor") == 0;
         if (!teleportOk && !alreadyUsingNoAnchorFallback)
         {
-            GetReplaySafeFallbackPosition(anchorMap, x, y, z, o);
-            teleportOk = anchorMap != 0 && player->TeleportTo(anchorMap, x, y, z, o);
+            GetReplaySafeFallbackPosition(player, anchorMap, x, y, z, o);
+            teleportOk = player->TeleportTo(anchorMap, x, y, z, o);
             LOG_WARN("server.loading", "[RTG][REPLAY][RETURN_TELEPORT_FALLBACK] replay={} viewerGuid={} nativeMap={} replayMap={} targetMap={} x={} y={} z={} o={} result={}",
                 session.replayId,
                 player->GetGUID().GetCounter(),
@@ -2915,7 +2931,7 @@ namespace
 
     static bool ReplaySyntheticUsePlayerDisplayIds()
     {
-        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds", false);
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds", true);
     }
 
     static bool ReplaySyntheticUseNpcRaceFallbackDisplays()
@@ -2935,9 +2951,9 @@ namespace
         // but it causes active-config spam and can still choose player-shaped
         // displays. This single, known-visible fallback keeps synthetic actors
         // easy to validate: create, move, destroy.
-        uint32 display = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId", 27800u);
+        uint32 display = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId", 49u);
         if (!display || IsKnownInvisibleReplayDisplay(display))
-            display = 27800u;
+            display = 49u;
         return display;
     }
 
@@ -3139,7 +3155,7 @@ namespace
         uint32 playerClass = snapshot ? uint32(snapshot->playerClass) : uint32(track.playerClass);
         uint32 gender = snapshot ? uint32(snapshot->gender) : uint32(track.gender);
         uint32 bytes0 = (race & 0xFFu) | ((playerClass & 0xFFu) << 8) | ((gender & 0xFFu) << 16);
-        uint32 unitFlags = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags", 33555202u);
+        uint32 unitFlags = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags", 0u);
         uint32 unitFlags2 = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags2", 0u);
         uint32 faction = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Faction", 35u);
         uint32 unitEntry = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitEntry", 98501u);
@@ -3182,7 +3198,7 @@ namespace
 
     static uint32 GetSyntheticReplayMovementBlockMode()
     {
-        return std::min<uint32>(1u, sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode", 1u));
+        return std::min<uint32>(2u, sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode", 2u));
     }
 
     static void AppendSyntheticReplayStationaryPositionBlock(WorldPacket& packet, ActorFrame const& frame)
@@ -3194,11 +3210,25 @@ namespace
         packet << frame.x << frame.y << frame.z << frame.o;
     }
 
+    static void AppendSyntheticReplayMovementSpeeds(WorldPacket& packet)
+    {
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedWalk", 2.5f);
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedRun", 7.0f);
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedRunBack", 4.5f);
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedSwim", 4.722222f);
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedSwimBack", 2.5f);
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedTurnRate", 3.141594f);
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedFlight", 7.0f);
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedFlightBack", 4.5f);
+        packet << sConfigMgr->GetOption<float>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedPitchRate", 3.141594f);
+    }
+
     static void AppendSyntheticReplayLivingMovementBlock(WorldPacket& packet, uint64 visualGuid, ActorFrame const& frame)
     {
         // 3.3.5 UNIT create/movement blocks expect UPDATEFLAG_LIVING followed by
-        // MovementInfo. The previous stationary-only block could be accepted by
-        // logging but still leave fake UNIT actors invisible client-side.
+        // MovementInfo and the server-side movement speed table. Omitting the
+        // speed table can make the client parse the following update-value mask
+        // incorrectly, producing invisible actor bodies or weapon-only ghosts.
         packet << uint8(0x20); // UPDATEFLAG_LIVING
         AppendReplayPackedGuidRaw(packet, visualGuid);
         packet << uint32(0); // movement flags
@@ -3206,6 +3236,9 @@ namespace
         packet << uint32(GetReplayNowMs());
         packet << frame.x << frame.y << frame.z << frame.o;
         packet << uint32(0); // fall time
+
+        if (GetSyntheticReplayMovementBlockMode() >= 2)
+            AppendSyntheticReplayMovementSpeeds(packet);
     }
 
     static void AppendSyntheticReplayMovementBlock(WorldPacket& packet, uint64 visualGuid, ActorFrame const& frame)
@@ -5296,15 +5329,18 @@ namespace
         ForceReplayViewerMovementRestore(player);
         RestoreReplayViewerVisualEquipment(player, session);
 
-        if (session.invisibleDisplayApplied && sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorShell.RestoreOnExit", true))
+        bool forceNativeDisplayOnExit = sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorShell.RestoreNativeDisplayOnExit", true);
+        if (sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorShell.RestoreOnExit", true) &&
+            (session.invisibleDisplayApplied || forceNativeDisplayOnExit || IsCopiedReplayMapId(player->GetMapId())))
         {
-            uint32 restoreDisplayId = session.priorDisplayId;
-            char const* displayRestoreSource = "prior_display";
+            uint32 nativeDisplayId = player->GetNativeDisplayId();
+            uint32 restoreDisplayId = forceNativeDisplayOnExit ? nativeDisplayId : session.priorDisplayId;
+            char const* displayRestoreSource = forceNativeDisplayOnExit ? "native_display_forced" : "prior_display";
 
             if (restoreDisplayId == 0 || IsKnownInvisibleReplayDisplay(restoreDisplayId))
             {
-                restoreDisplayId = player->GetNativeDisplayId();
-                displayRestoreSource = "native_display_after_invisible_prior";
+                restoreDisplayId = nativeDisplayId;
+                displayRestoreSource = "native_display_after_unsafe_prior";
             }
 
             if (restoreDisplayId != 0 && !IsKnownInvisibleReplayDisplay(restoreDisplayId))
@@ -5316,7 +5352,7 @@ namespace
                 session.replayId,
                 player->GetGUID().GetCounter(),
                 session.priorDisplayId,
-                player->GetNativeDisplayId(),
+                nativeDisplayId,
                 player->GetDisplayId(),
                 displayRestoreSource,
                 IsKnownInvisibleReplayDisplay(player->GetDisplayId()) ? "still_invisible" : "ok");
@@ -5379,7 +5415,7 @@ namespace
             return;
 
         uint64 viewerKey = player->GetGUID().GetCounter();
-        bool returnToAnchor = session.sandboxTeleportIssued && session.anchorMapId != 0 && player->GetMapId() == session.replayMapId;
+        bool returnToAnchor = session.sandboxTeleportIssued && session.anchorCaptured && player->GetMapId() == session.replayMapId;
 
         LOG_INFO("server.loading", "[RTG][REPLAY][STARTUP_CANCEL] replay={} viewerGuid={} nativeMap={} replayMap={} reason={} playerMap={} playerBg={} sessionBg={} inBattleground={} playerPhase={} replayPhase={} replayObjects={} clones={} cameraAnchor={} result=begin",
             session.replayId,
@@ -5528,10 +5564,10 @@ namespace
         loadedReplays.erase(viewerKey);
 
         std::string action = "return_to_anchor";
-        if (session.anchorMapId != 0)
+        if (session.anchorCaptured || IsCopiedReplayMapId(player->GetMapId()))
             ReturnReplayViewerToAnchor(player, session);
         else
-            action = "restore_only";
+            action = "restore_only_no_anchor";
 
         RestoreReplayViewerState(player, session);
         LogReplayStateRestore(player, session, session.lastTeardownReason.c_str(), "teardown");
@@ -5973,8 +6009,33 @@ namespace
         session.replayPhaseMask = 0;
         session.replayPhaseApplied = false;
         session.replayId = replayId;
-        session.anchorMapId = player->GetMapId();
-        session.anchorPosition.Relocate(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
+        session.anchorCaptured = true;
+        if (IsCopiedReplayMapId(player->GetMapId()))
+        {
+            uint32 safeMap = 0;
+            float safeX = 0.0f;
+            float safeY = 0.0f;
+            float safeZ = 0.0f;
+            float safeO = 0.0f;
+            GetReplaySafeFallbackPosition(player, safeMap, safeX, safeY, safeZ, safeO);
+            session.anchorMapId = safeMap;
+            session.anchorPosition.Relocate(safeX, safeY, safeZ, safeO);
+
+            LOG_WARN("server.loading", "[RTG][REPLAY][ANCHOR_SANITIZE] replay={} viewerGuid={} copiedMap={} safeMap={} x={} y={} z={} o={} result=fallback_anchor",
+                replayId,
+                player->GetGUID().GetCounter(),
+                player->GetMapId(),
+                safeMap,
+                safeX,
+                safeY,
+                safeZ,
+                safeO);
+        }
+        else
+        {
+            session.anchorMapId = player->GetMapId();
+            session.anchorPosition.Relocate(player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
+        }
         session.nextAnchorEnforceMs = 0;
         session.nextActorTeleportMs = 0;
         session.movementLocked = false;
@@ -6075,6 +6136,7 @@ namespace
                << " replayBg=" << session.battlegroundInstanceId
                << " priorPhase=" << session.priorPhaseMask
                << " replayPhase=" << session.replayPhaseMask
+               << " anchorCaptured=" << (session.anchorCaptured ? 1 : 0)
                << " anchorMap=" << session.anchorMapId
                << " anchorX=" << session.anchorPosition.GetPositionX()
                << " anchorY=" << session.anchorPosition.GetPositionY()

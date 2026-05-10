@@ -686,17 +686,22 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode
 #        Description: Selects the movement block shape used by synthetic replay
-#                     UNIT visuals. Use 1 for a full 3.3.5 UNIT living
-#                     MovementInfo block. Use 0 only as a legacy diagnostic
-#                     fallback for the old stationary position block.
+#                     UNIT visuals. Use 2 for a full 3.3.5 UNIT living
+#                     MovementInfo block plus the movement-speed table expected
+#                     after living movement data. Use 1 only as a diagnostic for
+#                     the previous minimal living block. Use 0 only as a legacy
+#                     stationary-position smoke test.
 #
 #                     If synthetic actors are planned and create packets are sent
-#                     but nothing appears in the client, keep this at 1.
+#                     but nothing appears in the client, keep this at 2. Missing
+#                     speed floats can make the client misread the update field
+#                     mask and render weapon-only or invisible ghost units.
 #
-#        Default:     1 - Living UNIT movement block
+#        Default:     2 - Living UNIT movement block with speed table
+#                     1 - Living UNIT movement block without speed table
 #                     0 - Legacy stationary position block
 #
-#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode = 1
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode = 2
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitEntry
 #        Description: Creature template entry used only as the client-side UNIT
@@ -717,14 +722,16 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.GuidLowBase = 14680064
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds
-#        Description: Allows synthetic UNIT visuals to use captured raw player display IDs.
-#                     Disabled by default because player display IDs on non-player UNIT visuals
-#                     can render as pale/white bodies on some 3.3.5 clients.
+#        Description: Allows synthetic UNIT visuals to use captured raw player
+#                     display IDs. This is enabled by default for the current
+#                     smoke test because the replay log proves actor appearance
+#                     snapshots are present; using captured display ids removes
+#                     one fallback-display variable from visibility testing.
 #
-#        Default:     0 - Use safe fallback displays
-#                     1 - Use captured player display IDs when available
+#        Default:     1 - Use captured player display IDs when available
+#                     0 - Use safe fallback displays
 #
-#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 0
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 1
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseNpcRaceFallbackDisplays
 #        Description: Uses a stable textured fallback display for the first
@@ -739,16 +746,14 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseNpcRaceFallbackDisplays = 1
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId
-#        Description: Known-visible display used by the first synthetic UNIT
-#                     smoke-test path when player display IDs are disabled.
-#                     This should be a stable textured creature/NPC display, not
-#                     an invisible trigger and not a raw player customization
-#                     display. The first goal is proving UNIT create/move/destroy
-#                     visibility, not perfect player armor.
+#        Description: Known-visible fallback display used only when captured
+#                     player display IDs are unavailable or disabled. The first
+#                     goal is proving UNIT create/move/destroy visibility, not
+#                     perfect player armor.
 #
-#        Default:     27800
+#        Default:     49
 #
-#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId = 27800
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId = 49
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseCreatureSilhouetteFallbackResolver
 #        Description: Allows the synthetic backend to reuse the older
@@ -770,13 +775,15 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays = 1
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags
-#        Description: UNIT_FIELD_FLAGS used for synthetic visual units. The
-#                     default keeps the unit nonattackable/immune/nonselectable
-#                     so it is display-only and cannot be interacted with.
+#        Description: UNIT_FIELD_FLAGS used for synthetic visual units. Keep at
+#                     0 during visibility testing so the client receives a plain
+#                     visible unit with no hidden/nonselectable flag ambiguity.
+#                     Interaction safety is handled by replay map isolation and
+#                     the fact that these are client-side synthetic visuals.
 #
-#        Default:     33555202
+#        Default:     0
 #
-#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags = 33555202
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags = 0
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BoundingRadius
 #        Description: UNIT_FIELD_BOUNDINGRADIUS for synthetic UNIT visuals.
@@ -793,6 +800,25 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Default:     1.5
 #
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.CombatReach = 1.5
+#
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Speed*
+#        Description: Movement speed floats appended after living MovementInfo
+#                     in synthetic UNIT create/move packets. WotLK clients expect
+#                     these fields for UPDATEFLAG_LIVING objects. They are sent
+#                     for visual packet correctness only; replay positioning is
+#                     still driven by recorded actor frames.
+#
+#        Defaults:    SpeedWalk = 2.5
+#                     SpeedRun = 7.0
+#                     SpeedRunBack = 4.5
+#                     SpeedSwim = 4.722222
+#                     SpeedSwimBack = 2.5
+#                     SpeedTurnRate = 3.141594
+#                     SpeedFlight = 7.0
+#                     SpeedFlightBack = 4.5
+#                     SpeedPitchRate = 3.141594
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedRun = 7.0
 #
 #    ArenaReplay.ActorVisual.RecordedPacketStream.Enable
 #        Description: Enables recorded-packet visual mode only when
@@ -1048,15 +1074,15 @@ ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Enable = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.DestroyVisualsOnTeardown = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SyncMs = 125
-ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode = 1
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode = 2
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitEntry = 98501
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.GuidLowBase = 14680064
-ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 0
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseNpcRaceFallbackDisplays = 1
-ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId = 27800
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId = 49
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseCreatureSilhouetteFallbackResolver = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays = 1
-ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags = 33555202
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags2 = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Faction = 35
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Level = 19
@@ -1065,6 +1091,15 @@ ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BaseAttackTime = 2000
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.RangedAttackTime = 2000
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.BoundingRadius = 0.389
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.CombatReach = 1.5
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedWalk = 2.5
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedRun = 7.0
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedRunBack = 4.5
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedSwim = 4.722222
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedSwimBack = 2.5
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedTurnRate = 3.141594
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedFlight = 7.0
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedFlightBack = 4.5
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedPitchRate = 3.141594
 ArenaReplay.ActorVisual.RecordedPacketStream.Enable = 0
 ArenaReplay.ActorVisual.RecordedPacketStream.RecordAllParticipantPackets = 1
 ArenaReplay.ActorVisual.RecordedPacketStream.MaxPacketsPerReplay = 25000
@@ -1817,61 +1852,56 @@ ArenaReplay.Sandbox.ApplyPhaseBeforeTeleport = 0
 ########################################
 #
 #    ArenaReplay.Return.UseFallbackWhenAnchorIsReplayMap
-#        Description: Uses the configured safe fallback position when a replay
-#                     viewer's saved return anchor is itself one of the copied
-#                     replay maps.
-#
-#                     This prevents failed startup or teardown from returning a
-#                     viewer back into replay-only copied map space.
+#        Description: If replay start was accidentally invoked from a copied
+#                     replay map, do not return the viewer back into the copied
+#                     replay sandbox on teardown. Instead, use the faction-safe
+#                     fallback location below. This also protects a second replay
+#                     launch after a failed teardown left the viewer in map 725-729.
 #
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
 #        Example:     ArenaReplay.Return.UseFallbackWhenAnchorIsReplayMap = 1
-#                     Copied replay map anchors use the safe fallback location.
 #
-#    ArenaReplay.Return.SafeFallbackMap
-#        Description: Map id used by the replay return fallback.
+#    ArenaReplay.Return.SafeFallbackAlliance*
+#        Description: Faction-safe fallback used for Alliance viewers when the
+#                     captured return anchor is missing or points into a copied
+#                     replay map. Defaults to Stormwind instead of using the old
+#                     generic Orgrimmar fallback for every character.
 #
-#        Default:     1
+#        Default:     Map = 0
+#                     X = -8833.38
+#                     Y = 628.628
+#                     Z = 94.0066
+#                     O = 1.06535
 #
-#        Example:     ArenaReplay.Return.SafeFallbackMap = 1
-#                     Uses Kalimdor as the safe fallback map.
+#        Example:     ArenaReplay.Return.SafeFallbackAllianceMap = 0
 #
-#    ArenaReplay.Return.SafeFallbackX
-#        Description: X coordinate used by the replay return fallback.
+#    ArenaReplay.Return.SafeFallbackHorde*
+#        Description: Faction-safe fallback used for Horde viewers when the
+#                     captured return anchor is missing or points into a copied
+#                     replay map. Defaults to Orgrimmar.
 #
-#        Default:     1629.85
+#        Default:     Map = 1
+#                     X = 1629.85
+#                     Y = -4373.64
+#                     Z = 31.5573
+#                     O = 3.69762
 #
-#        Example:     ArenaReplay.Return.SafeFallbackX = 1629.85
-#
-#    ArenaReplay.Return.SafeFallbackY
-#        Description: Y coordinate used by the replay return fallback.
-#
-#        Default:     -4373.64
-#
-#        Example:     ArenaReplay.Return.SafeFallbackY = -4373.64
-#
-#    ArenaReplay.Return.SafeFallbackZ
-#        Description: Z coordinate used by the replay return fallback.
-#
-#        Default:     31.5573
-#
-#        Example:     ArenaReplay.Return.SafeFallbackZ = 31.5573
-#
-#    ArenaReplay.Return.SafeFallbackO
-#        Description: Orientation used by the replay return fallback.
-#
-#        Default:     3.69762
-#
-#        Example:     ArenaReplay.Return.SafeFallbackO = 3.69762
+#        Example:     ArenaReplay.Return.SafeFallbackHordeMap = 1
 #
 ArenaReplay.Return.UseFallbackWhenAnchorIsReplayMap = 1
-ArenaReplay.Return.SafeFallbackMap = 1
-ArenaReplay.Return.SafeFallbackX = 1629.85
-ArenaReplay.Return.SafeFallbackY = -4373.64
-ArenaReplay.Return.SafeFallbackZ = 31.5573
-ArenaReplay.Return.SafeFallbackO = 3.69762
+ArenaReplay.Return.SafeFallbackAllianceMap = 0
+ArenaReplay.Return.SafeFallbackAllianceX = -8833.38
+ArenaReplay.Return.SafeFallbackAllianceY = 628.628
+ArenaReplay.Return.SafeFallbackAllianceZ = 94.0066
+ArenaReplay.Return.SafeFallbackAllianceO = 1.06535
+ArenaReplay.Return.SafeFallbackHordeMap = 1
+ArenaReplay.Return.SafeFallbackHordeX = 1629.85
+ArenaReplay.Return.SafeFallbackHordeY = -4373.64
+ArenaReplay.Return.SafeFallbackHordeZ = 31.5573
+ArenaReplay.Return.SafeFallbackHordeO = 3.69762
+#
 
 ########################################
 # ArenaReplay Spectator Shell
@@ -1963,6 +1993,19 @@ ArenaReplay.Return.SafeFallbackO = 3.69762
 #        Example:     ArenaReplay.SpectatorShell.RestoreOnExit = 1
 #                     Replay teardown restores the viewer body.
 #
+#    ArenaReplay.SpectatorShell.RestoreNativeDisplayOnExit
+#        Description: Forces replay teardown to restore the viewer's native
+#                     playable display id instead of trusting a captured prior
+#                     display. This prevents repeated replay attempts from
+#                     preserving a bad weapon-only/invisible spectator display
+#                     such as the sword shell observed after copied-map exit.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled, restore the captured prior display when safe
+#
+#        Example:     ArenaReplay.SpectatorShell.RestoreNativeDisplayOnExit = 1
+#                     Replay teardown repairs the viewer to their race model.
+#
 ArenaReplay.SpectatorShell.HideViewerBody = 1
 ArenaReplay.SpectatorShell.MoveBodyToHoldingPoint = 1
 ArenaReplay.SpectatorShell.DisableGravity = 1
@@ -1971,6 +2014,7 @@ ArenaReplay.SpectatorShell.UseInvisibleDisplay = 1
 ArenaReplay.SpectatorShell.InvisibleDisplayId = 11686
 ArenaReplay.SpectatorShell.ClearViewerVisibleWeapons = 1
 ArenaReplay.SpectatorShell.RestoreOnExit = 1
+ArenaReplay.SpectatorShell.RestoreNativeDisplayOnExit = 1
 ArenaReplay.SpectatorShell.ForceRestoreMovementFlags = 1
 ArenaReplay.SpectatorShell.DelayedRestoreVerifyMs = 500
 ArenaReplay.SpectatorShell.SecondDelayedRestoreVerifyMs = 1500
