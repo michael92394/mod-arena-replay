@@ -2931,7 +2931,7 @@ namespace
 
     static bool ReplaySyntheticUsePlayerDisplayIds()
     {
-        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds", true);
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds", false);
     }
 
     static bool ReplaySyntheticUseNpcRaceFallbackDisplays()
@@ -2941,7 +2941,31 @@ namespace
 
     static bool ReplaySyntheticUseShapeshiftDisplays()
     {
-        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays", true);
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays", false);
+    }
+
+    static bool ReplaySyntheticServerCloneFallbackEnabled()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.ServerCloneFallback.Enable", true);
+    }
+
+    static bool ReplaySyntheticEmitUnitVisualPackets()
+    {
+        // Backend 2 packet-only UNIT visuals are still experimental. When the
+        // server-clone fallback is enabled, default packet UNIT emission off so
+        // the viewer does not see invisible hitboxes or orphaned ranged weapons.
+        bool fallback = ReplaySyntheticServerCloneFallbackEnabled();
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets", !fallback);
+    }
+
+    static bool ReplaySyntheticEmitEquipment()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitEquipment", false);
+    }
+
+    static bool ReplaySyntheticSkipViewerActorPackets()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SkipViewerActorPackets", true);
     }
 
     static uint32 ReplaySyntheticFallbackDisplayId()
@@ -2967,12 +2991,15 @@ namespace
         bool emitterEnabled = sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Enable", true);
         bool destroyOnTeardown = sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.DestroyVisualsOnTeardown", true);
         bool rawPacketsDisabled = !ReplayRecordedPacketVisualBackendEnabled();
+        bool serverCloneFallback = ReplaySyntheticServerCloneFallbackEnabled();
+        bool emitUnitPackets = ReplaySyntheticEmitUnitVisualPackets();
+        bool emitEquipment = ReplaySyntheticEmitEquipment();
         uint32 planned = 0;
 
         session.syntheticReplayVisualGuids.clear();
         session.syntheticActorsPlanned = 0;
 
-        LOG_INFO("server.loading", "[RTG][REPLAY][SYNTHETIC_BACKEND] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} emitterEnable={} rawPacketsDisabled={} clonesDisabled=1 destroyOnTeardown={} result=enabled_foundation",
+        LOG_INFO("server.loading", "[RTG][REPLAY][SYNTHETIC_BACKEND] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} emitterEnable={} rawPacketsDisabled={} clonesDisabled={} serverCloneFallback={} emitUnitVisualPackets={} emitEquipment={} destroyOnTeardown={} result=enabled_foundation",
             session.replayId,
             viewer ? viewer->GetGUID().GetCounter() : 0,
             session.nativeMapId,
@@ -2980,6 +3007,10 @@ namespace
             session.replayPhaseMask,
             emitterEnabled ? 1 : 0,
             rawPacketsDisabled ? 1 : 0,
+            serverCloneFallback ? 0 : 1,
+            serverCloneFallback ? 1 : 0,
+            emitUnitPackets ? 1 : 0,
+            emitEquipment ? 1 : 0,
             destroyOnTeardown ? 1 : 0);
 
         for (ReplayActorSelectionRef const& ref : BuildPlayableReplayActorSelections(match))
@@ -3161,9 +3192,9 @@ namespace
         uint32 unitEntry = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitEntry", 98501u);
         uint32 level = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Level", 19u);
         uint32 health = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Health", 100u);
-        uint32 mainhand = snapshot ? snapshot->mainhandItemEntry : 0;
-        uint32 offhand = snapshot ? snapshot->offhandItemEntry : 0;
-        uint32 ranged = snapshot ? snapshot->rangedItemEntry : 0;
+        uint32 mainhand = (snapshot && ReplaySyntheticEmitEquipment()) ? snapshot->mainhandItemEntry : 0;
+        uint32 offhand = (snapshot && ReplaySyntheticEmitEquipment()) ? snapshot->offhandItemEntry : 0;
+        uint32 ranged = (snapshot && ReplaySyntheticEmitEquipment()) ? snapshot->rangedItemEntry : 0;
 
         // 3.3.5 update field indexes. General type value 9 is Unit; player is
         // intentionally not used here so the replay actor cannot become the
@@ -3303,7 +3334,7 @@ namespace
         if (!viewer || !viewer->GetSession() || !ReplaySyntheticReplayPacketEmitterBackendEnabled())
             return;
 
-        if (!sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets", true))
+        if (!ReplaySyntheticEmitUnitVisualPackets())
             return;
 
         if (session.syntheticReplayVisualGuids.empty())
@@ -3317,6 +3348,9 @@ namespace
                 continue;
 
             ActorTrack const& track = (*tracks)[ref.trackIndex];
+            if (ReplaySyntheticSkipViewerActorPackets() && viewer && track.guid == viewer->GetGUID().GetCounter())
+                continue;
+
             auto guidIt = session.syntheticReplayVisualGuids.find(track.guid);
             if (guidIt == session.syntheticReplayVisualGuids.end())
                 continue;
@@ -3380,7 +3414,7 @@ namespace
         if (!viewer || !viewer->GetSession() || session.teardownInProgress || !ReplaySyntheticReplayPacketEmitterBackendEnabled())
             return;
 
-        if (!sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets", true))
+        if (!ReplaySyntheticEmitUnitVisualPackets())
             return;
 
         EnsureSyntheticReplayActorsCreated(viewer, match, session);
@@ -3398,6 +3432,9 @@ namespace
                 continue;
 
             ActorTrack const& track = (*tracks)[ref.trackIndex];
+            if (ReplaySyntheticSkipViewerActorPackets() && viewer && track.guid == viewer->GetGUID().GetCounter())
+                continue;
+
             auto guidIt = session.syntheticReplayVisualGuids.find(track.guid);
             if (guidIt == session.syntheticReplayVisualGuids.end())
                 continue;
@@ -4210,7 +4247,9 @@ namespace
         if (!viewer || !viewer->GetMap())
             return false;
 
-        if (!sConfigMgr->GetOption<bool>("ArenaReplay.CloneScene.Enable", true) && !ReplayRecordedPacketVisualBackendEnabled())
+        bool cloneSceneEnabled = sConfigMgr->GetOption<bool>("ArenaReplay.CloneScene.Enable", true);
+        bool syntheticCloneFallbackRequested = GetReplayActorVisualBackend() == RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL && ReplaySyntheticServerCloneFallbackEnabled();
+        if (!cloneSceneEnabled && !ReplayRecordedPacketVisualBackendEnabled() && !syntheticCloneFallbackRequested)
             return false;
 
         if (session.cloneSceneBuilt)
@@ -4283,6 +4322,7 @@ namespace
                     (visualBackend == RTG_REPLAY_ACTOR_VISUAL_CREATURE_SILHOUETTE ? "creature_silhouette_debug" : "experimental_planned_only")));
         LogReplayPlayerBodyPlan(viewer, match, session);
 
+        bool syntheticServerCloneFallback = false;
         if (visualBackend == RTG_REPLAY_ACTOR_VISUAL_SYNTHETIC_PLAYER_OBJECT_EXPERIMENTAL)
         {
             if (!ReplaySyntheticReplayPacketEmitterBackendEnabled())
@@ -4298,8 +4338,23 @@ namespace
 
             LogSyntheticReplayPacketEmitterPlan(viewer, match, session);
             EnsureSyntheticReplayActorsCreated(viewer, match, session);
-            session.cloneSceneBuilt = true;
-            return true;
+
+            syntheticServerCloneFallback = ReplaySyntheticServerCloneFallbackEnabled();
+            LOG_INFO("server.loading", "[RTG][REPLAY][SYNTHETIC_CLONE_FALLBACK] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} enabled={} emitUnitVisualPackets={} result={}",
+                session.replayId,
+                viewer->GetGUID().GetCounter(),
+                session.nativeMapId,
+                session.replayMapId,
+                session.replayPhaseMask,
+                syntheticServerCloneFallback ? 1 : 0,
+                ReplaySyntheticEmitUnitVisualPackets() ? 1 : 0,
+                syntheticServerCloneFallback ? "server_clone_visibility_enabled" : "packet_only");
+
+            if (!syntheticServerCloneFallback)
+            {
+                session.cloneSceneBuilt = true;
+                return true;
+            }
         }
 
         if (visualBackend == RTG_REPLAY_ACTOR_VISUAL_RECORDED_PACKET_STREAM)
@@ -4596,6 +4651,11 @@ namespace
         return true;
     }
 
+    static bool ReplayBuffObjectsSpawnOnlyOnActivation()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.ReplayObjects.Buff.SpawnOnlyOnActivation", true);
+    }
+
     static uint32 SecondsToMs(uint32 seconds)
     {
         return seconds * IN_MILLISECONDS;
@@ -4804,6 +4864,55 @@ namespace
         return viewer->GetMap()->GetGameObject(binding.guid);
     }
 
+    static bool SpawnReplayDynamicObjectFromTemplate(Player* viewer, ActiveReplaySession& session, ReplayDynamicObjectTemplate const& def, bool activeOnSpawn, char const* reason)
+    {
+        if (!viewer || !viewer->GetMap() || viewer->GetMapId() != session.replayMapId)
+            return false;
+
+        bool required = IsReplayDynamicObjectRequired(def);
+        GameObject* go = viewer->SummonGameObject(def.entry, def.x, def.y, def.z, def.o, def.rot0, def.rot1, def.rot2, def.rot3, 0);
+        if (!go)
+        {
+            ReplayDynamicObjectBinding failed;
+            failed.entry = def.entry;
+            failed.nativeMap = session.nativeMapId;
+            failed.replayMap = session.replayMapId;
+            failed.role = def.role;
+            failed.required = required;
+            LogReplayDynamicObjectEvent("OBJECT_SPAWN", session, viewer, &failed, def.entry, def.role, reason ? reason : "spawn", required ? "hard_fail" : "missing_optional");
+            return !required;
+        }
+
+        go->SetPhaseMask(session.replayPhaseMask ? session.replayPhaseMask : viewer->GetPhaseMask(), true);
+        go->SetLootState(GO_READY);
+        go->SetGoState(GO_STATE_READY);
+
+        ReplayDynamicObjectBinding binding;
+        binding.guid = go->GetGUID();
+        binding.entry = def.entry;
+        binding.nativeMap = session.nativeMapId;
+        binding.replayMap = session.replayMapId;
+        binding.role = def.role;
+        binding.required = required;
+        binding.active = false;
+        binding.spawned = true;
+        binding.cleaned = false;
+        session.replayObjects.push_back(binding);
+        ReplayDynamicObjectBinding& stored = session.replayObjects.back();
+
+        LogReplayDynamicObjectEvent("OBJECT_SPAWN", session, viewer, &stored, def.entry, def.role, reason ? reason : "spawn", "ok");
+
+        if (activeOnSpawn)
+        {
+            bool effectiveActive = def.invertState ? !activeOnSpawn : activeOnSpawn;
+            go->SetGoState(effectiveActive ? GO_STATE_ACTIVE : GO_STATE_READY);
+            stored.active = activeOnSpawn;
+            LogReplayDynamicObjectEvent("OBJECT_STATE", session, viewer, &stored, stored.entry, stored.role, ReplayDynamicObjectStateName(stored.role, activeOnSpawn), "ok");
+        }
+
+        return true;
+    }
+
     static bool SetReplayDynamicObjectState(Player* viewer, ActiveReplaySession& session, ReplayDynamicObjectBinding& binding, bool active, bool force = false)
     {
         if (!force && binding.active == active)
@@ -4827,6 +4936,28 @@ namespace
     static bool SetReplayDynamicObjectsByRole(Player* viewer, ActiveReplaySession& session, uint32 role, bool active, bool force = false)
     {
         bool ok = true;
+        bool hasRoleBinding = false;
+        for (ReplayDynamicObjectBinding const& binding : session.replayObjects)
+        {
+            if (binding.role == role && binding.spawned && !binding.cleaned)
+            {
+                hasRoleBinding = true;
+                break;
+            }
+        }
+
+        if (!hasRoleBinding && active && role == RTG_REPLAY_OBJECT_BUFF && ReplayBuffObjectsSpawnOnlyOnActivation())
+        {
+            for (ReplayDynamicObjectTemplate const& def : ReplayDynamicObjectTemplates)
+            {
+                if (def.role != RTG_REPLAY_OBJECT_BUFF || !ShouldIncludeReplayDynamicObjectTemplate(session, def))
+                    continue;
+
+                if (!SpawnReplayDynamicObjectFromTemplate(viewer, session, def, true, "activate_spawn"))
+                    ok = false;
+            }
+        }
+
         for (ReplayDynamicObjectBinding& binding : session.replayObjects)
         {
             if (binding.role != role || !binding.spawned || binding.cleaned)
@@ -4952,46 +5083,36 @@ namespace
             return false;
 
         bool hardFailure = false;
+        uint32 delayedBuffs = 0;
         for (ReplayDynamicObjectTemplate const& def : ReplayDynamicObjectTemplates)
         {
             if (!ShouldIncludeReplayDynamicObjectTemplate(session, def))
                 continue;
 
-            bool required = IsReplayDynamicObjectRequired(def);
-            GameObject* go = viewer->SummonGameObject(def.entry, def.x, def.y, def.z, def.o, def.rot0, def.rot1, def.rot2, def.rot3, 0);
-            if (!go)
+            if (def.role == RTG_REPLAY_OBJECT_BUFF && ReplayBuffObjectsSpawnOnlyOnActivation())
             {
-                ReplayDynamicObjectBinding failed;
-                failed.entry = def.entry;
-                failed.nativeMap = session.nativeMapId;
-                failed.replayMap = session.replayMapId;
-                failed.role = def.role;
-                failed.required = required;
-                LogReplayDynamicObjectEvent("OBJECT_SPAWN", session, viewer, &failed, def.entry, def.role, "spawn", required ? "hard_fail" : "missing_optional");
-                if (required)
-                    hardFailure = true;
+                ++delayedBuffs;
+                LogReplayDynamicObjectEvent("OBJECT_SPAWN", session, viewer, nullptr, def.entry, def.role, "delayed_until_activation", "ok");
                 continue;
             }
 
-            go->SetPhaseMask(session.replayPhaseMask ? session.replayPhaseMask : viewer->GetPhaseMask(), true);
-            go->SetLootState(GO_READY);
-            go->SetGoState(GO_STATE_READY);
-
-            ReplayDynamicObjectBinding binding;
-            binding.guid = go->GetGUID();
-            binding.entry = def.entry;
-            binding.nativeMap = session.nativeMapId;
-            binding.replayMap = session.replayMapId;
-            binding.role = def.role;
-            binding.required = required;
-            binding.active = false;
-            binding.spawned = true;
-            binding.cleaned = false;
-            session.replayObjects.push_back(binding);
-            LogReplayDynamicObjectEvent("OBJECT_SPAWN", session, viewer, &session.replayObjects.back(), def.entry, def.role, "spawn", "ok");
+            bool required = IsReplayDynamicObjectRequired(def);
+            if (!SpawnReplayDynamicObjectFromTemplate(viewer, session, def, false, "spawn") && required)
+                hardFailure = true;
         }
 
         session.replayObjectsSpawned = true;
+        if (delayedBuffs != 0)
+        {
+            LOG_INFO("server.loading", "[RTG][REPLAY][BUFF_OBJECT_DELAY] replay={} viewerGuid={} nativeMap={} replayMap={} phase={} delayedBuffs={} activateMs={} result=spawn_on_activation",
+                session.replayId,
+                viewer ? viewer->GetGUID().GetCounter() : 0,
+                session.nativeMapId,
+                session.replayMapId,
+                session.replayPhaseMask,
+                delayedBuffs,
+                GetReplayBuffActivateRawMs(session));
+        }
         LogRingReplayObjectSummary(session, viewer);
         return !hardFailure;
     }
@@ -5747,8 +5868,9 @@ namespace
             }
         }
 
-        uint64 const viewerActorGuid = replayer->GetGUID().GetRawValue();
-        bool noCloneVisualBackend = ReplayRecordedPacketVisualBackendEnabled() || ReplaySyntheticReplayPacketEmitterBackendEnabled();
+        uint64 const viewerActorGuid = replayer->GetGUID().GetCounter();
+        bool syntheticBackendWithoutCloneFallback = ReplaySyntheticReplayPacketEmitterBackendEnabled() && !ReplaySyntheticServerCloneFallbackEnabled();
+        bool noCloneVisualBackend = ReplayRecordedPacketVisualBackendEnabled() || syntheticBackendWithoutCloneFallback;
         Creature* selectedClone = noCloneVisualBackend ? nullptr : FindReplayClone(replayer, session, track->guid);
         bool selectedSelf = track->guid == viewerActorGuid;
         if (selectedSelf && !selectedClone && !noCloneVisualBackend)

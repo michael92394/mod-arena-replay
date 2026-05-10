@@ -637,11 +637,12 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Enable
 #        Description: Enables the synthetic replay packet emitter foundation.
-#                     Backend 2 keeps raw recorded packets disabled, keeps clones
-#                     disabled, and creates a stable originalGuid -> visualGuid
-#                     plan for every replay actor. The first emitter stage sends
-#                     synthetic UNIT create/movement packets only, never active
-#                     mover or self-control packets.
+#                     Backend 2 keeps raw recorded packets disabled and creates a
+#                     stable originalGuid -> visualGuid plan for every replay
+#                     actor. Packet-only UNIT visuals are still experimental; the
+#                     production-safe default uses server-owned replay clones as
+#                     the visible/cyclable actor layer while packet emission can
+#                     be enabled separately for diagnostics.
 #
 #        Default:     1 - Enabled
 #                     0 - Disabled
@@ -661,19 +662,50 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets
-#        Description: Emits first-pass synthetic UNIT create and movement updates
-#                     for replay actors using fake replay-only visual GUIDs.
+#        Description: Emits experimental synthetic UNIT create and movement
+#                     updates for replay actors using fake replay-only visual
+#                     GUIDs. Leave disabled while ServerCloneFallback is enabled;
+#                     packet-only UNIT visuals have repeatedly produced invisible
+#                     hitboxes/floating weapon artifacts in 3.3.5 clients.
 #
-#                     This is intentionally not TYPEID_PLAYER yet. It is safer
-#                     because it cannot become the viewer client's active mover
-#                     or controlled character. It is the first visible synthetic
-#                     packet layer and should replace unsafe raw packet playback
-#                     during Option C testing.
+#        Default:     0 - Disabled; use server clone fallback for visible actors
+#                     1 - Enabled for packet-layer diagnostics only
 #
-#        Default:     1 - Enabled
-#                     0 - Disabled, planning/logging only
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets = 0
 #
-#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets = 1
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.ServerCloneFallback.Enable
+#        Description: When backend 2 is selected, also build normal server-owned
+#                     replay clones from recorded actor tracks. This is the
+#                     current visible replay actor path and keeps POV cycling
+#                     usable while packet-only actor visuals remain experimental.
+#
+#        Default:     1 - Enabled, visible actors come from replay clones
+#                     0 - Disabled, packet-only diagnostics
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.ServerCloneFallback.Enable = 1
+#
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitEquipment
+#        Description: Allows experimental synthetic UNIT packets to include
+#                     virtual weapon item slots. Keep disabled unless debugging
+#                     packet actor appearance, because weapon fields can render
+#                     without a body when the client rejects the synthetic unit.
+#
+#        Default:     0 - Do not send synthetic packet weapons
+#                     1 - Send captured virtual item slots
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitEquipment = 0
+#
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SkipViewerActorPackets
+#        Description: Prevents packet-only synthetic visuals from creating a
+#                     duplicate fake UNIT for the viewer's own actor. The viewer
+#                     body is already parked/hidden as the camera shell, so a
+#                     second packet actor for self can appear as a weapon-only
+#                     invisible hitbox.
+#
+#        Default:     1 - Skip viewer-owned synthetic packet actor
+#                     0 - Emit self actor packet for diagnostics
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SkipViewerActorPackets = 1
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SyncMs
 #        Description: Minimum cadence for synthetic UNIT movement packets. Lower
@@ -722,16 +754,14 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.GuidLowBase = 14680064
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds
-#        Description: Allows synthetic UNIT visuals to use captured raw player
-#                     display IDs. This is enabled by default for the current
-#                     smoke test because the replay log proves actor appearance
-#                     snapshots are present; using captured display ids removes
-#                     one fallback-display variable from visibility testing.
+#        Description: Allows experimental synthetic UNIT visuals to use captured
+#                     raw player display IDs. Keep disabled by default while
+#                     server clone fallback handles visible actors.
 #
-#        Default:     1 - Use captured player display IDs when available
-#                     0 - Use safe fallback displays
+#        Default:     0 - Use safe fallback displays for packet diagnostics
+#                     1 - Use captured player display IDs when available
 #
-#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 1
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 0
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseNpcRaceFallbackDisplays
 #        Description: Uses a stable textured fallback display for the first
@@ -767,12 +797,13 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseCreatureSilhouetteFallbackResolver = 0
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays
-#        Description: Allows captured shapeshift display IDs to override fallback displays when present.
+#        Description: Allows captured shapeshift display IDs to override fallback
+#                     displays when packet-only synthetic visuals are enabled.
 #
-#        Default:     1 - Enabled
-#                     0 - Disabled
+#        Default:     0 - Disabled during visibility stabilization
+#                     1 - Enabled for packet appearance diagnostics
 #
-#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays = 1
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays = 0
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags
 #        Description: UNIT_FIELD_FLAGS used for synthetic visual units. Keep at
@@ -1072,16 +1103,19 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 ArenaReplay.ActorVisual.Backend = 2
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Enable = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.DestroyVisualsOnTeardown = 1
-ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets = 1
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets = 0
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.ServerCloneFallback.Enable = 1
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitEquipment = 0
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SkipViewerActorPackets = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SyncMs = 125
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode = 2
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitEntry = 98501
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.GuidLowBase = 14680064
-ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 1
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseNpcRaceFallbackDisplays = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.FallbackDisplayId = 49
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseCreatureSilhouetteFallbackResolver = 0
-ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays = 1
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UseShapeshiftDisplays = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitFlags2 = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Faction = 35
@@ -1140,7 +1174,7 @@ ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
-#        Example:     ArenaReplay.CloneScene.Enable = 0
+#        Example:     ArenaReplay.CloneScene.Enable = 1
 #                     Replay playback uses synchronized surrogate actors.
 #
 #    ArenaReplay.CloneScene.UseViewpoint
@@ -1356,7 +1390,7 @@ ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 #        Example:     ArenaReplay.CloneScene.SyncMs = 40
 #                     Replay clones are updated every 40 ms.
 #
-ArenaReplay.CloneScene.Enable = 0
+ArenaReplay.CloneScene.Enable = 1
 ArenaReplay.CloneScene.UseViewpoint = 1
 ArenaReplay.CloneScene.CloneEntry = 98501
 ArenaReplay.CloneScene.CameraAnchorEntry = 98502
@@ -1604,6 +1638,19 @@ ArenaReplay.ReplayMap.RequireResolved = 1
 #        Example:     ArenaReplay.ReplayObjects.BuffDelaySeconds = 90
 #                     Buff crystals activate at 90 seconds.
 #
+#    ArenaReplay.ReplayObjects.Buff.SpawnOnlyOnActivation
+#        Description: Delays spawning arena buff crystal gameobjects until the
+#                     configured activation time instead of spawning them at
+#                     replay start in an inactive state. This matches arena
+#                     behavior better for clients where inactive crystals are
+#                     still visually present.
+#
+#        Default:     1 - Spawn crystals only when they activate
+#                     0 - Spawn crystals at replay start and change state later
+#
+#        Example:     ArenaReplay.ReplayObjects.Buff.SpawnOnlyOnActivation = 1
+#                     Crystals are not visible before activation.
+#
 #    ArenaReplay.ReplayObjects.DalaranWater.Enable
 #        Description: Enables Dalaran Sewers waterfall visual/collision replay
 #                     objects on copied replay maps.
@@ -1773,6 +1820,7 @@ ArenaReplay.ReplayObjects.StartWithGatesOpen = 1
 ArenaReplay.ReplayObjects.OpenGatesAtMatchOpen = 1
 ArenaReplay.ReplayObjects.GateOpenDelayMs = 0
 ArenaReplay.ReplayObjects.BuffDelaySeconds = 90
+ArenaReplay.ReplayObjects.Buff.SpawnOnlyOnActivation = 1
 ArenaReplay.ReplayObjects.DalaranWater.Enable = 1
 ArenaReplay.ReplayObjects.DalaranWater.EnableInSyntheticBackend = 0
 ArenaReplay.ReplayObjects.DalaranWater.CollisionEnable = 0
