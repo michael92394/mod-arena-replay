@@ -1745,10 +1745,19 @@ namespace
         return mapId == 725 || mapId == 726 || mapId == 727 || mapId == 728 || mapId == 729;
     }
 
-    static void ReturnReplayViewerToAnchor(Player* player, ActiveReplaySession const& session)
+    static void GetReplaySafeFallbackPosition(uint32& mapId, float& x, float& y, float& z, float& o)
+    {
+        mapId = sConfigMgr->GetOption<uint32>("ArenaReplay.Return.SafeFallbackMap", 1u);
+        x = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackX", 1629.85f);
+        y = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackY", -4373.64f);
+        z = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackZ", 31.5573f);
+        o = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackO", 3.69762f);
+    }
+
+    static bool ReturnReplayViewerToAnchor(Player* player, ActiveReplaySession const& session)
     {
         if (!player)
-            return;
+            return false;
 
         uint32 anchorMap = session.anchorMapId;
         float x = session.anchorPosition.GetPositionX();
@@ -1756,19 +1765,48 @@ namespace
         float z = session.anchorPosition.GetPositionZ();
         float o = session.anchorPosition.GetOrientation();
 
-        if (anchorMap == 0)
-            return;
-
-        if (IsCopiedReplayMapId(anchorMap) && sConfigMgr->GetOption<bool>("ArenaReplay.Return.UseFallbackWhenAnchorIsReplayMap", true))
+        char const* returnSource = "anchor";
+        if (anchorMap == 0 || (IsCopiedReplayMapId(anchorMap) && sConfigMgr->GetOption<bool>("ArenaReplay.Return.UseFallbackWhenAnchorIsReplayMap", true)))
         {
-            anchorMap = sConfigMgr->GetOption<uint32>("ArenaReplay.Return.SafeFallbackMap", 1u);
-            x = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackX", 1629.85f);
-            y = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackY", -4373.64f);
-            z = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackZ", 31.5573f);
-            o = sConfigMgr->GetOption<float>("ArenaReplay.Return.SafeFallbackO", 3.69762f);
+            GetReplaySafeFallbackPosition(anchorMap, x, y, z, o);
+            returnSource = session.anchorMapId == 0 ? "fallback_no_anchor" : "fallback_anchor_was_replay_map";
         }
 
-        player->TeleportTo(anchorMap, x, y, z, o);
+        uint32 playerMapBefore = player->GetMapId();
+        bool teleportOk = anchorMap != 0 && player->TeleportTo(anchorMap, x, y, z, o);
+        LOG_INFO("server.loading", "[RTG][REPLAY][RETURN_TELEPORT] replay={} viewerGuid={} nativeMap={} replayMap={} source={} targetMap={} x={} y={} z={} o={} playerMapBefore={} result={}",
+            session.replayId,
+            player->GetGUID().GetCounter(),
+            session.nativeMapId,
+            session.replayMapId,
+            returnSource,
+            anchorMap,
+            x,
+            y,
+            z,
+            o,
+            playerMapBefore,
+            teleportOk ? "ok" : "failed");
+
+        bool alreadyUsingNoAnchorFallback = std::strcmp(returnSource, "fallback_no_anchor") == 0;
+        if (!teleportOk && !alreadyUsingNoAnchorFallback)
+        {
+            GetReplaySafeFallbackPosition(anchorMap, x, y, z, o);
+            teleportOk = anchorMap != 0 && player->TeleportTo(anchorMap, x, y, z, o);
+            LOG_WARN("server.loading", "[RTG][REPLAY][RETURN_TELEPORT_FALLBACK] replay={} viewerGuid={} nativeMap={} replayMap={} targetMap={} x={} y={} z={} o={} result={}",
+                session.replayId,
+                player->GetGUID().GetCounter(),
+                session.nativeMapId,
+                session.replayMapId,
+                anchorMap,
+                x,
+                y,
+                z,
+                o,
+                teleportOk ? "ok" : "failed");
+        }
+
+        return teleportOk;
     }
 
     static uint32 GetReplayNowMs()
@@ -2698,7 +2736,12 @@ namespace
         uint32 hardcodedFallback = GetHardcodedReplayNpcSilhouetteDisplay();
         uint32 displayId = sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.CreatureSilhouette.Display.Default", hardcodedFallback);
 
-        if (snapshot)
+        // Keep fallback resolution quiet by default. AzerothCore logs every
+        // missing GetOption key, so probing Race.Gender.Class dynamically creates
+        // dozens of false-positive missing-config warnings during every replay.
+        // Define Team0/Team1 in the module config for coarse overrides; enable the
+        // specific resolver only when intentionally testing per-race display IDs.
+        if (sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.CreatureSilhouette.Display.UseSpecificOverrides", false) && snapshot)
         {
             std::string const raceKey = GetReplayRaceToken(snapshot->race ? snapshot->race : track.race);
             std::string const genderKey = GetReplayGenderToken(snapshot->gender);
@@ -3137,13 +3180,43 @@ namespace
         values.push_back({146, FloatToUpdateUInt32(1.0f)});                     // UNIT_FIELD_HOVERHEIGHT
     }
 
-    static void AppendSyntheticReplayPositionBlock(WorldPacket& packet, ActorFrame const& frame)
+    static uint32 GetSyntheticReplayMovementBlockMode()
     {
-        // Minimal non-living position block. This is intentionally safer than a
-        // living movement block because it cannot assign active mover/control to
-        // the viewer client.
-        packet << uint8(0x40); // UPDATEFLAG_HAS_POSITION / stationary position (one byte in 3.3.5 update blocks)
+        return std::min<uint32>(1u, sConfigMgr->GetOption<uint32>("ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode", 1u));
+    }
+
+    static void AppendSyntheticReplayStationaryPositionBlock(WorldPacket& packet, ActorFrame const& frame)
+    {
+        // Legacy smoke-test mode: non-living stationary position block. Kept as
+        // a config fallback only; UNIT visuals render more reliably with a full
+        // living movement block on 3.3.5 clients.
+        packet << uint8(0x40); // UPDATEFLAG_HAS_POSITION
         packet << frame.x << frame.y << frame.z << frame.o;
+    }
+
+    static void AppendSyntheticReplayLivingMovementBlock(WorldPacket& packet, uint64 visualGuid, ActorFrame const& frame)
+    {
+        // 3.3.5 UNIT create/movement blocks expect UPDATEFLAG_LIVING followed by
+        // MovementInfo. The previous stationary-only block could be accepted by
+        // logging but still leave fake UNIT actors invisible client-side.
+        packet << uint8(0x20); // UPDATEFLAG_LIVING
+        AppendReplayPackedGuidRaw(packet, visualGuid);
+        packet << uint32(0); // movement flags
+        packet << uint16(0); // movement flags 2
+        packet << uint32(GetReplayNowMs());
+        packet << frame.x << frame.y << frame.z << frame.o;
+        packet << uint32(0); // fall time
+    }
+
+    static void AppendSyntheticReplayMovementBlock(WorldPacket& packet, uint64 visualGuid, ActorFrame const& frame)
+    {
+        if (GetSyntheticReplayMovementBlockMode() == 0)
+        {
+            AppendSyntheticReplayStationaryPositionBlock(packet, frame);
+            return;
+        }
+
+        AppendSyntheticReplayLivingMovementBlock(packet, visualGuid, frame);
     }
 
     static WorldPacket BuildSyntheticReplayCreateUnitPacket(uint64 visualGuid, ActorTrack const& track, ReplayActorAppearanceSnapshot const* snapshot, bool winnerSide, ActorFrame const& frame)
@@ -3154,7 +3227,7 @@ namespace
         packet << uint8(3);    // UPDATETYPE_CREATE_OBJECT2
         AppendReplayPackedGuidRaw(packet, visualGuid);
         packet << uint8(3);    // TYPEID_UNIT
-        AppendSyntheticReplayPositionBlock(packet, frame);
+        AppendSyntheticReplayMovementBlock(packet, visualGuid, frame);
 
         std::vector<std::pair<uint16, uint32>> values;
         BuildSyntheticReplayUnitValues(values, visualGuid, track, snapshot, winnerSide);
@@ -3164,12 +3237,12 @@ namespace
 
     static WorldPacket BuildSyntheticReplayMovementPacket(uint64 visualGuid, ActorFrame const& frame)
     {
-        WorldPacket packet(SMSG_UPDATE_OBJECT, 64);
+        WorldPacket packet(SMSG_UPDATE_OBJECT, 96);
         packet << uint32(1);   // update count
         packet << uint8(0);    // no transport
         packet << uint8(1);    // UPDATETYPE_MOVEMENT
         AppendReplayPackedGuidRaw(packet, visualGuid);
-        AppendSyntheticReplayPositionBlock(packet, frame);
+        AppendSyntheticReplayMovementBlock(packet, visualGuid, frame);
         return packet;
     }
 
@@ -5223,8 +5296,31 @@ namespace
         ForceReplayViewerMovementRestore(player);
         RestoreReplayViewerVisualEquipment(player, session);
 
-        if (session.invisibleDisplayApplied && sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorShell.RestoreOnExit", true) && session.priorDisplayId != 0)
-            player->SetDisplayId(session.priorDisplayId);
+        if (session.invisibleDisplayApplied && sConfigMgr->GetOption<bool>("ArenaReplay.SpectatorShell.RestoreOnExit", true))
+        {
+            uint32 restoreDisplayId = session.priorDisplayId;
+            char const* displayRestoreSource = "prior_display";
+
+            if (restoreDisplayId == 0 || IsKnownInvisibleReplayDisplay(restoreDisplayId))
+            {
+                restoreDisplayId = player->GetNativeDisplayId();
+                displayRestoreSource = "native_display_after_invisible_prior";
+            }
+
+            if (restoreDisplayId != 0 && !IsKnownInvisibleReplayDisplay(restoreDisplayId))
+                player->SetDisplayId(restoreDisplayId);
+            else
+                displayRestoreSource = "skipped_no_safe_display";
+
+            LOG_INFO("server.loading", "[RTG][REPLAY][DISPLAY_RESTORE] replay={} viewerGuid={} priorDisplay={} nativeDisplay={} finalDisplay={} source={} result={}",
+                session.replayId,
+                player->GetGUID().GetCounter(),
+                session.priorDisplayId,
+                player->GetNativeDisplayId(),
+                player->GetDisplayId(),
+                displayRestoreSource,
+                IsKnownInvisibleReplayDisplay(player->GetDisplayId()) ? "still_invisible" : "ok");
+        }
 
         if (session.viewerHidden || !player->IsVisible())
             player->SetVisible(true);

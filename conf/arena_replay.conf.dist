@@ -684,6 +684,20 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #
 #        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SyncMs = 125
 #
+#    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode
+#        Description: Selects the movement block shape used by synthetic replay
+#                     UNIT visuals. Use 1 for a full 3.3.5 UNIT living
+#                     MovementInfo block. Use 0 only as a legacy diagnostic
+#                     fallback for the old stationary position block.
+#
+#                     If synthetic actors are planned and create packets are sent
+#                     but nothing appears in the client, keep this at 1.
+#
+#        Default:     1 - Living UNIT movement block
+#                     0 - Legacy stationary position block
+#
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode = 1
+#
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitEntry
 #        Description: Creature template entry used only as the client-side UNIT
 #                     entry identity in synthetic packets. It is not spawned as a
@@ -910,9 +924,10 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #    ArenaReplay.ActorVisual.CreatureSilhouette.Display.*
 #        Description: Creature display ids used for textured silhouette bodies.
 #
-#                     Resolution order is:
-#                     Race.Gender.Class, Race.Gender, Race, Team0/Team1, then
-#                     Default. Unconfigured values fall back to Default.
+#                     Quiet default resolution is Default -> Team0/Team1. The
+#                     Race.Gender.Class / Race.Gender / Race probing path is
+#                     disabled unless Display.UseSpecificOverrides is enabled,
+#                     because AzerothCore logs every missing dynamic config key.
 #
 #                     These must be valid textured CreatureDisplayID values, not
 #                     player display ids and not invisible trigger displays.
@@ -921,8 +936,14 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #
 #        Default:     27800
 #
-#        Example:     ArenaReplay.ActorVisual.CreatureSilhouette.Display.Human.Male = 27800
-#                     Overrides the Human male silhouette body.
+#        Example:     ArenaReplay.ActorVisual.CreatureSilhouette.Display.Default = 27800
+#                     ArenaReplay.ActorVisual.CreatureSilhouette.Display.Team0 = 27800
+#                     ArenaReplay.ActorVisual.CreatureSilhouette.Display.Team1 = 27800
+#                     ArenaReplay.ActorVisual.CreatureSilhouette.Display.UseSpecificOverrides = 0
+#
+#                     Keep UseSpecificOverrides disabled unless you have actually
+#                     defined the per-race/per-gender/per-class keys you want to
+#                     test.
 #
 #    ArenaReplay.ActorVisual.PlayerBody.Enable
 #        Description: Enables the experimental player-body acquisition path.
@@ -1027,6 +1048,7 @@ ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Enable = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.DestroyVisualsOnTeardown = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SyncMs = 125
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.MovementBlockMode = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UnitEntry = 98501
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.GuidLowBase = 14680064
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.UsePlayerDisplayIds = 0
@@ -1054,6 +1076,9 @@ ArenaReplay.ActorVisual.RecordedPacketStream.SkipUnmappedViewerGuidPackets = 1
 ArenaReplay.ActorVisual.CreatureSilhouette.UsePlayerDisplayIds = 0
 ArenaReplay.ActorVisual.CreatureSilhouette.UseNpcRaceFallbackDisplays = 1
 ArenaReplay.ActorVisual.CreatureSilhouette.Display.Default = 27800
+ArenaReplay.ActorVisual.CreatureSilhouette.Display.Team0 = 27800
+ArenaReplay.ActorVisual.CreatureSilhouette.Display.Team1 = 27800
+ArenaReplay.ActorVisual.CreatureSilhouette.Display.UseSpecificOverrides = 0
 ArenaReplay.ActorVisual.PlayerBody.Enable = 0
 ArenaReplay.ActorVisual.PlayerBody.AccountPrefix = rtgreplay
 ArenaReplay.ActorVisual.PlayerBody.Level = 19
