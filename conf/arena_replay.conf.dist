@@ -594,6 +594,149 @@ ArenaReplay.Playback.CloneMode.PrewarmClonesAtFirstFrame = 1
 ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 
 ########################################
+# ArenaReplay Quality Gate
+########################################
+#
+#    ArenaReplay.Quality.Enable
+#        Description: Enables production replay quality classification. When
+#                     enabled, new replays are marked as PACKET_FULL,
+#                     PACKET_PARTIAL, PATH_ONLY, or BOT_ONLY_OR_INVALID at save
+#                     time. The normal replay browser should only show replays
+#                     that are safe to watch as packet-backed arena replays.
+#
+#        Default:     1 - Enabled
+#                     0 - Disabled
+#
+#        Example:     ArenaReplay.Quality.Enable = 1
+#                     Store replay quality metadata and apply quality filters.
+#
+#    ArenaReplay.Quality.RequirePacketCoverageBothTeams
+#        Description: Requires recorded outbound packet coverage for both arena
+#                     teams before a replay is considered packet-qualified. This
+#                     hides matches where the recorder only captured the real
+#                     player's team while the bot-only side had no replayable
+#                     packet stream.
+#
+#        Default:     1 - Both teams must have packet coverage
+#                     0 - Single-team packet coverage may be accepted
+#
+#        Example:     ArenaReplay.Quality.RequirePacketCoverageBothTeams = 1
+#                     Hide team0Packets>0/team1Packets=0 style replays.
+#
+#    ArenaReplay.Quality.RequireRealPlayersBothTeams
+#        Description: Requires both teams to have at least the configured number
+#                     of receiver sessions in the recorded packet stream. In the
+#                     current recorder this is the practical real-player proxy:
+#                     playerbot-only teams often do not produce client-session
+#                     packet coverage, which creates path-only/clone-only replays.
+#
+#        Default:     1 - Require real session packet coverage on both teams
+#                     0 - Do not require this additional gate
+#
+#        Example:     ArenaReplay.Quality.RequireRealPlayersBothTeams = 1
+#                     Prefer real-player-vs-real-player replay records.
+#
+#    ArenaReplay.Quality.MinRealPlayersPerTeam
+#        Description: Minimum distinct packet receiver sessions required per
+#                     winner/loser team when RequireRealPlayersBothTeams is
+#                     enabled. For solo testing, use 1. For stricter 2v2/3v3
+#                     production curation, raise this later after packet capture
+#                     is proven across all participants.
+#
+#        Default:     1
+#
+#        Example:     ArenaReplay.Quality.MinRealPlayersPerTeam = 1
+#
+#    ArenaReplay.Quality.HideSingleTeamPacketReplays
+#        Description: Marks single-team packet replays hidden from the normal
+#                     replay browser. This prevents the replay list from showing
+#                     player-vs-bot or one-sided packet captures that can only be
+#                     reconstructed with creature silhouettes/path tracks.
+#
+#        Default:     1 - Hide single-team packet replays
+#                     0 - Keep them visible
+#
+#        Example:     ArenaReplay.Quality.HideSingleTeamPacketReplays = 1
+#
+#    ArenaReplay.Quality.HideBotOnlyReplays
+#        Description: Hides replay rows classified as BOT_ONLY_OR_INVALID. These
+#                     rows do not contain a trustworthy packet stream for normal
+#                     player replay viewing.
+#
+#        Default:     1 - Hide bot-only/invalid records
+#                     0 - Allow them through browser filtering
+#
+#        Example:     ArenaReplay.Quality.HideBotOnlyReplays = 1
+#
+#    ArenaReplay.Quality.HideUnqualifiedFromBrowser
+#        Description: Filters the gossip replay browser, recent matches, saved
+#                     replays, player-name searches, and most-watched lists so
+#                     only packet-qualified rows are visible by default.
+#
+#        Default:     1 - Hide unqualified rows
+#                     0 - Show all rows regardless of packet quality
+#
+#        Example:     ArenaReplay.Quality.HideUnqualifiedFromBrowser = 1
+#
+#    ArenaReplay.Quality.AllowUnqualifiedDirectLoad
+#        Description: Allows direct Match ID loading of unqualified rows. Keep
+#                     disabled for production so broken path-only or clone-only
+#                     replays cannot be opened accidentally. Enable temporarily
+#                     only when debugging the replay renderer.
+#
+#        Default:     0 - Block direct loading of unqualified rows
+#                     1 - Allow direct loading for debugging
+#
+#        Example:     ArenaReplay.Quality.AllowUnqualifiedDirectLoad = 0
+#
+#    ArenaReplay.Quality.AllowLegacyUnqualifiedDirectLoad
+#        Description: Allows direct loading of old replay rows that do not have
+#                     quality metadata because the database update has not been
+#                     applied or the row predates this gate. Keep disabled for
+#                     production curation.
+#
+#        Default:     0 - Block legacy unqualified direct load
+#                     1 - Allow legacy rows for debugging
+#
+#        Example:     ArenaReplay.Quality.AllowLegacyUnqualifiedDirectLoad = 0
+#
+#    ArenaReplay.Debug.AllowCloneFallback
+#        Description: Documentation switch for the new doctrine: creature clone
+#                     fallback is debug-only. Production viewing should use
+#                     packet-qualified records with ActorVisual.Backend = 3.
+#                     This key is intentionally separate from the synthetic
+#                     fallback implementation switch so operators can document
+#                     when clone debugging is permitted.
+#
+#        Default:     0 - Clone fallback is not a production replay path
+#                     1 - Operators may temporarily debug clone fallback
+#
+#        Example:     ArenaReplay.Debug.AllowCloneFallback = 0
+#
+#    ArenaReplay.HUD.VisibleChatDebug
+#        Description: Shows raw [RTG_REPLAY] HUD transport lines in the chat
+#                     frame. Disable for production to cut replay chat noise.
+#                     A future hidden addon channel should replace the visible
+#                     system-message transport for a clean HUD.
+#
+#        Default:     0 - Do not print raw HUD payloads in chat
+#                     1 - Print raw HUD payloads for addon/debug testing
+#
+#        Example:     ArenaReplay.HUD.VisibleChatDebug = 0
+#
+ArenaReplay.Quality.Enable = 1
+ArenaReplay.Quality.RequirePacketCoverageBothTeams = 1
+ArenaReplay.Quality.RequireRealPlayersBothTeams = 1
+ArenaReplay.Quality.MinRealPlayersPerTeam = 1
+ArenaReplay.Quality.HideSingleTeamPacketReplays = 1
+ArenaReplay.Quality.HideBotOnlyReplays = 1
+ArenaReplay.Quality.HideUnqualifiedFromBrowser = 1
+ArenaReplay.Quality.AllowUnqualifiedDirectLoad = 0
+ArenaReplay.Quality.AllowLegacyUnqualifiedDirectLoad = 0
+ArenaReplay.Debug.AllowCloneFallback = 0
+ArenaReplay.HUD.VisibleChatDebug = 0
+
+########################################
 # ArenaReplay Actor Visual Backend
 ########################################
 #
@@ -612,28 +755,25 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #                     playerbot-backed replay bodies. The module logs the
 #                     player-body plan and currently falls back to backend 0.
 #
-#                     Backend 2 is synthetic_replay_packet_emitter. This is the
-#                     new safe replay backend: it allocates replay-only fake
-#                     visual GUIDs for every original actor, logs the complete
-#                     synthetic actor plan, keeps the viewer GUID untouched, and
-#                     does not send raw recorded packets or creature actor clones.
-#                     It can emit a first-pass control-safe UNIT visual packet
-#                     stream from captured actor tracks and appearance data.
+#                     Backend 2 is synthetic_replay_packet_emitter. It remains a
+#                     diagnostic foundation for Option C GUID-map experiments,
+#                     but it is not the production replay body path. Packet-only
+#                     synthetic UNIT visuals repeatedly produced invisible bodies
+#                     and floating weapon artifacts.
 #
 #                     Backend 3 is recorded_packet_stream. It disables creature
-#                     actor clones and sends the original recorded visual packet
-#                     stream. It can show real-looking players, but it is no
-#                     longer the default because raw packets may carry self,
-#                     active-mover, or control state that can corrupt the viewer
-#                     session if not parsed and rewritten opcode-safely.
+#                     actor clones and sends the recorded packet stream to the
+#                     replay viewer. Production replay browsing is now quality
+#                     gated so only records with packet coverage for both teams
+#                     should reach this backend by default.
 #
-#        Default:     2 - synthetic_replay_packet_emitter
+#        Default:     3 - recorded_packet_stream
 #                     0 - creature_silhouette_debug
 #                     1 - playerbot_body_experimental
 #                     3 - recorded_packet_stream
 #
-#        Example:     ArenaReplay.ActorVisual.Backend = 2
-#                     Uses the safe synthetic backend foundation.
+#        Example:     ArenaReplay.ActorVisual.Backend = 3
+#                     Uses packet-qualified recorded packet playback.
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Enable
 #        Description: Enables the synthetic replay packet emitter foundation.
@@ -679,10 +819,10 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #                     current visible replay actor path and keeps POV cycling
 #                     usable while packet-only actor visuals remain experimental.
 #
-#        Default:     1 - Enabled, visible actors come from replay clones
-#                     0 - Disabled, packet-only diagnostics
+#        Default:     0 - Disabled for production packet-quality playback
+#                     1 - Enabled only for debug clone fallback viewing
 #
-#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.ServerCloneFallback.Enable = 1
+#        Example:     ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.ServerCloneFallback.Enable = 0
 #
 #    ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitEquipment
 #        Description: Allows experimental synthetic UNIT packets to include
@@ -860,7 +1000,7 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Default:     0 - Disabled with this distribution
 #                     1 - Enabled when Backend = 3
 #
-#        Example:     ArenaReplay.ActorVisual.RecordedPacketStream.Enable = 0
+#        Example:     ArenaReplay.ActorVisual.RecordedPacketStream.Enable = 1
 #                     Keeps raw recorded packet playback disabled by default.
 #
 #    ArenaReplay.ActorVisual.RecordedPacketStream.RecordAllParticipantPackets
@@ -1100,11 +1240,11 @@ ArenaReplay.Playback.CloneMode.MatchOpenFromFirstActorFrame = 1
 #        Example:     ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 #                     Future replay bodies use captured customization.
 #
-ArenaReplay.ActorVisual.Backend = 2
+ArenaReplay.ActorVisual.Backend = 3
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.Enable = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.DestroyVisualsOnTeardown = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitUnitVisualPackets = 0
-ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.ServerCloneFallback.Enable = 1
+ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.ServerCloneFallback.Enable = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.EmitEquipment = 0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SkipViewerActorPackets = 1
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SyncMs = 125
@@ -1134,7 +1274,7 @@ ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedTurnRate = 3.141594
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedFlight = 7.0
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedFlightBack = 4.5
 ArenaReplay.ActorVisual.SyntheticReplayPacketEmitter.SpeedPitchRate = 3.141594
-ArenaReplay.ActorVisual.RecordedPacketStream.Enable = 0
+ArenaReplay.ActorVisual.RecordedPacketStream.Enable = 1
 ArenaReplay.ActorVisual.RecordedPacketStream.RecordAllParticipantPackets = 1
 ArenaReplay.ActorVisual.RecordedPacketStream.MaxPacketsPerReplay = 25000
 ArenaReplay.ActorVisual.RecordedPacketStream.RequirePackets = 1
@@ -1174,7 +1314,7 @@ ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 #        Default:     1 - Enabled
 #                     0 - Disabled
 #
-#        Example:     ArenaReplay.CloneScene.Enable = 1
+#        Example:     ArenaReplay.CloneScene.Enable = 0
 #                     Replay playback uses synchronized surrogate actors.
 #
 #    ArenaReplay.CloneScene.UseViewpoint
@@ -1390,7 +1530,7 @@ ArenaReplay.ActorVisual.PlayerBody.UseCapturedCustomization = 1
 #        Example:     ArenaReplay.CloneScene.SyncMs = 40
 #                     Replay clones are updated every 40 ms.
 #
-ArenaReplay.CloneScene.Enable = 1
+ArenaReplay.CloneScene.Enable = 0
 ArenaReplay.CloneScene.UseViewpoint = 1
 ArenaReplay.CloneScene.CloneEntry = 98501
 ArenaReplay.CloneScene.CameraAnchorEntry = 98502
@@ -2186,10 +2326,10 @@ ArenaReplay.SpectatorOnly.LockMovement = 1
 #        Example:     ArenaReplay.Debug.LogReturn = 1
 #                     Logs whether the replay viewer safely returned to a sane state.
 #
-ArenaReplay.Debug.Enable = 0
-ArenaReplay.Debug.Verbose = 0
+ArenaReplay.Debug.Enable = 1
+ArenaReplay.Debug.Verbose = 1
 ArenaReplay.Debug.LogHud = 1
 ArenaReplay.Debug.LogActors = 1
-ArenaReplay.Debug.LogPlayback = 0
+ArenaReplay.Debug.LogPlayback = 1
 ArenaReplay.Debug.LogTeardown = 1
 ArenaReplay.Debug.LogReturn = 1

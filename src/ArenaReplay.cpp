@@ -181,6 +181,16 @@ struct MatchRecord
     uint32 team1PacketCount = 0;
     uint32 neutralPacketCount = 0;
     uint32 skippedPacketCount = 0;
+    uint32 team0PacketReceiverCount = 0;
+    uint32 team1PacketReceiverCount = 0;
+    uint32 winnerPacketCount = 0;
+    uint32 loserPacketCount = 0;
+    uint32 winnerRealPlayerCount = 0;
+    uint32 loserRealPlayerCount = 0;
+    bool packetQualified = false;
+    bool visibleInBrowser = false;
+    std::string replayQuality = "legacy_unqualified";
+    std::string replayQualityReason;
     std::vector<uint64> winnerPlayerGuidList;
     std::vector<uint64> loserPlayerGuidList;
     std::vector<ActorTrack> winnerActorTracks;
@@ -687,6 +697,265 @@ namespace
         return available;
     }
 
+    struct ReplayQualitySummary
+    {
+        std::string quality = "legacy_unqualified";
+        std::string reason = "legacy_or_missing_metadata";
+        bool packetQualified = false;
+        bool visibleInBrowser = false;
+        uint32 team0Packets = 0;
+        uint32 team1Packets = 0;
+        uint32 neutralPackets = 0;
+        uint32 skippedPackets = 0;
+        uint32 totalPackets = 0;
+        uint32 team0RealPlayers = 0;
+        uint32 team1RealPlayers = 0;
+        uint32 winnerPackets = 0;
+        uint32 loserPackets = 0;
+        uint32 winnerRealPlayers = 0;
+        uint32 loserRealPlayers = 0;
+    };
+
+    static bool ReplayQualityEnabled()
+    {
+        return sConfigMgr->GetOption<bool>("ArenaReplay.Quality.Enable", true);
+    }
+
+    static bool ReplayQualityColumnsAvailable()
+    {
+        static bool checked = false;
+        static bool available = false;
+
+        if (!checked)
+        {
+            available =
+                ReplayColumnExists("character_arena_replays", "replayQuality") &&
+                ReplayColumnExists("character_arena_replays", "qualityReason") &&
+                ReplayColumnExists("character_arena_replays", "packetQualified") &&
+                ReplayColumnExists("character_arena_replays", "visibleInBrowser") &&
+                ReplayColumnExists("character_arena_replays", "team0PacketCount") &&
+                ReplayColumnExists("character_arena_replays", "team1PacketCount") &&
+                ReplayColumnExists("character_arena_replays", "winnerRealPlayerCount") &&
+                ReplayColumnExists("character_arena_replays", "loserRealPlayerCount");
+            checked = true;
+            LOG_INFO("server.loading", "[RTG][REPLAY][QUALITY_SCHEMA] columns={} result=checked", available ? 1 : 0);
+        }
+
+        return available;
+    }
+
+    static std::string ReplayQualityColumn(std::string const& alias, char const* column)
+    {
+        if (!column)
+            return std::string();
+
+        if (alias.empty())
+            return std::string("`") + column + "`";
+
+        return alias + ".`" + column + "`";
+    }
+
+    static std::string ReplayQualityBrowserWhereClause(char const* alias = "")
+    {
+        if (!ReplayQualityEnabled() || !sConfigMgr->GetOption<bool>("ArenaReplay.Quality.HideUnqualifiedFromBrowser", true))
+            return std::string();
+
+        if (!ReplayQualityColumnsAvailable())
+            return std::string();
+
+        std::string a = alias ? alias : "";
+        return " AND " + ReplayQualityColumn(a, "packetQualified") + " = 1 AND " + ReplayQualityColumn(a, "visibleInBrowser") + " = 1 ";
+    }
+
+    static ReplayQualitySummary BuildReplayQualitySummary(MatchRecord const& match, TeamId winnerTeamId)
+    {
+        ReplayQualitySummary q;
+        q.team0Packets = match.team0PacketCount;
+        q.team1Packets = match.team1PacketCount;
+        q.neutralPackets = match.neutralPacketCount;
+        q.skippedPackets = match.skippedPacketCount;
+        q.totalPackets = uint32(match.packets.size());
+
+        std::unordered_set<uint64> team0Receivers;
+        std::unordered_set<uint64> team1Receivers;
+        for (PacketRecord const& packetRecord : match.packets)
+        {
+            if (!packetRecord.receiverGuid)
+                continue;
+
+            if (packetRecord.receiverTeam == TEAM_ALLIANCE)
+                team0Receivers.insert(packetRecord.receiverGuid.GetRawValue());
+            else if (packetRecord.receiverTeam == TEAM_HORDE)
+                team1Receivers.insert(packetRecord.receiverGuid.GetRawValue());
+        }
+
+        q.team0RealPlayers = uint32(team0Receivers.size());
+        q.team1RealPlayers = uint32(team1Receivers.size());
+
+        if (winnerTeamId == TEAM_ALLIANCE)
+        {
+            q.winnerPackets = q.team0Packets;
+            q.loserPackets = q.team1Packets;
+            q.winnerRealPlayers = q.team0RealPlayers;
+            q.loserRealPlayers = q.team1RealPlayers;
+        }
+        else
+        {
+            q.winnerPackets = q.team1Packets;
+            q.loserPackets = q.team0Packets;
+            q.winnerRealPlayers = q.team1RealPlayers;
+            q.loserRealPlayers = q.team0RealPlayers;
+        }
+
+        bool const bothTeamPackets = q.team0Packets > 0 && q.team1Packets > 0;
+        bool const anyPackets = q.totalPackets > 0;
+        bool const hasActorTracks = !match.winnerActorTracks.empty() || !match.loserActorTracks.empty();
+        uint32 const minRealPerTeam = std::max<uint32>(1u, sConfigMgr->GetOption<uint32>("ArenaReplay.Quality.MinRealPlayersPerTeam", 1u));
+        bool const bothTeamsHaveRealSessions = q.winnerRealPlayers >= minRealPerTeam && q.loserRealPlayers >= minRealPerTeam;
+
+        if (bothTeamPackets)
+            q.quality = "PACKET_FULL";
+        else if (anyPackets)
+            q.quality = "PACKET_PARTIAL";
+        else if (hasActorTracks)
+            q.quality = "PATH_ONLY";
+        else
+            q.quality = "BOT_ONLY_OR_INVALID";
+
+        q.packetQualified = true;
+        q.reason = "packet_full";
+
+        if (sConfigMgr->GetOption<bool>("ArenaReplay.Quality.RequirePacketCoverageBothTeams", true) && !bothTeamPackets)
+        {
+            q.packetQualified = false;
+            q.reason = anyPackets ? "single_team_packet_coverage" : (hasActorTracks ? "path_only_no_packet_stream" : "no_packets_or_tracks");
+        }
+
+        if (q.packetQualified && sConfigMgr->GetOption<bool>("ArenaReplay.Quality.RequireRealPlayersBothTeams", true) && !bothTeamsHaveRealSessions)
+        {
+            q.packetQualified = false;
+            q.reason = "missing_real_session_packets_on_both_teams";
+        }
+
+        if (q.packetQualified && sConfigMgr->GetOption<bool>("ArenaReplay.Quality.HideBotOnlyReplays", true) && q.quality == "BOT_ONLY_OR_INVALID")
+        {
+            q.packetQualified = false;
+            q.reason = "bot_only_or_invalid";
+        }
+
+        if (q.packetQualified && sConfigMgr->GetOption<bool>("ArenaReplay.Quality.HideSingleTeamPacketReplays", true) && !bothTeamPackets)
+        {
+            q.packetQualified = false;
+            q.reason = "single_team_packet_replay_hidden";
+        }
+
+        q.visibleInBrowser = !ReplayQualityEnabled() || q.packetQualified;
+        if (!sConfigMgr->GetOption<bool>("ArenaReplay.Quality.HideUnqualifiedFromBrowser", true))
+            q.visibleInBrowser = true;
+
+        return q;
+    }
+
+    static void PersistReplayQualityMetadata(uint32 replayId, ReplayQualitySummary const& q)
+    {
+        if (!replayId || !ReplayQualityColumnsAvailable())
+            return;
+
+        CharacterDatabase.Execute(
+            "UPDATE `character_arena_replays` SET "
+            "`replayQuality` = '{}', `qualityReason` = '{}', `packetQualified` = {}, `visibleInBrowser` = {}, "
+            "`team0PacketCount` = {}, `team1PacketCount` = {}, `neutralPacketCount` = {}, `skippedPacketCount` = {}, "
+            "`team0RealPlayerCount` = {}, `team1RealPlayerCount` = {}, `winnerPacketCount` = {}, `loserPacketCount` = {}, "
+            "`winnerRealPlayerCount` = {}, `loserRealPlayerCount` = {} WHERE `id` = {}",
+            EscapeSqlString(q.quality),
+            EscapeSqlString(q.reason),
+            q.packetQualified ? 1 : 0,
+            q.visibleInBrowser ? 1 : 0,
+            q.team0Packets,
+            q.team1Packets,
+            q.neutralPackets,
+            q.skippedPackets,
+            q.team0RealPlayers,
+            q.team1RealPlayers,
+            q.winnerPackets,
+            q.loserPackets,
+            q.winnerRealPlayers,
+            q.loserRealPlayers,
+            replayId);
+    }
+
+    static ReplayQualitySummary LoadReplayQualityMetadata(uint32 replayId)
+    {
+        ReplayQualitySummary q;
+        if (!replayId || !ReplayQualityColumnsAvailable())
+            return q;
+
+        QueryResult result = CharacterDatabase.Query(
+            "SELECT `replayQuality`, `qualityReason`, `packetQualified`, `visibleInBrowser`, "
+            "`team0PacketCount`, `team1PacketCount`, `neutralPacketCount`, `skippedPacketCount`, "
+            "`team0RealPlayerCount`, `team1RealPlayerCount`, `winnerPacketCount`, `loserPacketCount`, "
+            "`winnerRealPlayerCount`, `loserRealPlayerCount` FROM `character_arena_replays` WHERE `id` = {}",
+            replayId);
+        if (!result)
+            return q;
+
+        Field* fields = result->Fetch();
+        if (!fields)
+            return q;
+
+        q.quality = fields[0].Get<std::string>();
+        q.reason = fields[1].Get<std::string>();
+        q.packetQualified = fields[2].Get<uint8>() != 0;
+        q.visibleInBrowser = fields[3].Get<uint8>() != 0;
+        q.team0Packets = fields[4].Get<uint32>();
+        q.team1Packets = fields[5].Get<uint32>();
+        q.neutralPackets = fields[6].Get<uint32>();
+        q.skippedPackets = fields[7].Get<uint32>();
+        q.team0RealPlayers = fields[8].Get<uint32>();
+        q.team1RealPlayers = fields[9].Get<uint32>();
+        q.winnerPackets = fields[10].Get<uint32>();
+        q.loserPackets = fields[11].Get<uint32>();
+        q.winnerRealPlayers = fields[12].Get<uint32>();
+        q.loserRealPlayers = fields[13].Get<uint32>();
+        return q;
+    }
+
+    static bool ReplayQualityAllowsPlayback(uint32 replayId, ReplayQualitySummary const& q, Player* player)
+    {
+        if (!ReplayQualityEnabled())
+            return true;
+
+        if (!ReplayQualityColumnsAvailable())
+        {
+            bool allowLegacy = sConfigMgr->GetOption<bool>("ArenaReplay.Quality.AllowLegacyUnqualifiedDirectLoad", false);
+            if (!allowLegacy && player && player->GetSession())
+                ChatHandler(player->GetSession()).PSendSysMessage("Replay {} has no quality metadata and is hidden by packet-quality rules.", replayId);
+            return allowLegacy;
+        }
+
+        bool allowUnqualified = sConfigMgr->GetOption<bool>("ArenaReplay.Quality.AllowUnqualifiedDirectLoad", false);
+        if (allowUnqualified)
+            return true;
+
+        if (q.packetQualified && q.visibleInBrowser)
+            return true;
+
+        if (player && player->GetSession())
+            ChatHandler(player->GetSession()).PSendSysMessage("Replay {} is hidden: quality={} reason={}. It is not a packet-qualified replay.", replayId, q.quality, q.reason);
+
+        LOG_WARN("server.loading", "[RTG][REPLAY][QUALITY_LOAD_BLOCK] replay={} viewerGuid={} quality={} reason={} packetQualified={} visibleInBrowser={} team0Packets={} team1Packets={} winnerRealPlayers={} loserRealPlayers={} result=blocked",
+            replayId,
+            player ? player->GetGUID().GetCounter() : 0,
+            q.quality,
+            q.reason,
+            q.packetQualified ? 1 : 0,
+            q.visibleInBrowser ? 1 : 0,
+            q.team0Packets,
+            q.team1Packets,
+            q.winnerRealPlayers,
+            q.loserRealPlayers);
+        return false;
+    }
 
     static MatchRecord& EnsureLiveMatchRecord(Battleground* bg)
     {
@@ -1413,6 +1682,9 @@ namespace
             ActiveReplaySession const* session = sessionIt != activeReplaySessions.end() ? &sessionIt->second : nullptr;
             ReplayLog(ReplayDebugFlag::Hud, session, player, "HUD", std::string("msg=") + body + " allowed=1");
         }
+
+        if (!sConfigMgr->GetOption<bool>("ArenaReplay.HUD.VisibleChatDebug", false))
+            return;
 
         std::string text = std::string(GetReplayHudPrefix()) + body;
         ChatHandler(player->GetSession()).SendSysMessage(text.c_str());
@@ -6924,6 +7196,18 @@ public:
         match.winnerPlayerGuidList = ParseGuidCsv(winnerGuids);
         match.loserPlayerGuidList = ParseGuidCsv(loserGuids);
 
+        ReplayQualitySummary replayQuality = BuildReplayQualitySummary(match, winnerTeamId);
+        match.team0PacketReceiverCount = replayQuality.team0RealPlayers;
+        match.team1PacketReceiverCount = replayQuality.team1RealPlayers;
+        match.winnerPacketCount = replayQuality.winnerPackets;
+        match.loserPacketCount = replayQuality.loserPackets;
+        match.winnerRealPlayerCount = replayQuality.winnerRealPlayers;
+        match.loserRealPlayerCount = replayQuality.loserRealPlayers;
+        match.packetQualified = replayQuality.packetQualified;
+        match.visibleInBrowser = replayQuality.visibleInBrowser;
+        match.replayQuality = replayQuality.quality;
+        match.replayQualityReason = replayQuality.reason;
+
         LOG_INFO("server.loading", "[RTG][REPLAY][PACKET_CAPTURE_SUMMARY] replayInstance={} team0Packets={} team1Packets={} neutralPackets={} totalPackets={} skippedPackets={} recordAllParticipants={} result={}",
             bg->GetInstanceID(),
             match.team0PacketCount,
@@ -6933,6 +7217,23 @@ public:
             match.skippedPacketCount,
             sConfigMgr->GetOption<bool>("ArenaReplay.ActorVisual.RecordedPacketStream.RecordAllParticipantPackets", true) ? 1 : 0,
             (match.team0PacketCount > 0 && match.team1PacketCount > 0) ? "ok" : "single_team_or_empty");
+
+        LOG_INFO("server.loading", "[RTG][REPLAY][QUALITY] replayInstance={} team0Packets={} team1Packets={} neutralPackets={} totalPackets={} team0RealPlayers={} team1RealPlayers={} winnerPackets={} loserPackets={} winnerRealPlayers={} loserRealPlayers={} quality={} packetQualified={} visibleInBrowser={} reason={}",
+            bg->GetInstanceID(),
+            replayQuality.team0Packets,
+            replayQuality.team1Packets,
+            replayQuality.neutralPackets,
+            replayQuality.totalPackets,
+            replayQuality.team0RealPlayers,
+            replayQuality.team1RealPlayers,
+            replayQuality.winnerPackets,
+            replayQuality.loserPackets,
+            replayQuality.winnerRealPlayers,
+            replayQuality.loserRealPlayers,
+            replayQuality.quality,
+            replayQuality.packetQualified ? 1 : 0,
+            replayQuality.visibleInBrowser ? 1 : 0,
+            replayQuality.reason);
 
         std::string encodedContents = Acore::Encoding::Base32::Encode(buffer.contentsAsVector());
         std::string encodedWinnerTracks = SerializeActorTracks(match.winnerActorTracks);
@@ -7015,11 +7316,17 @@ public:
         {
             LOG_INFO("server.loading", "[RTG][REPLAY][APPEARANCE_PERSIST] replayId={} snapshotCount={} inlineColumn={} result=inline_saved", insertedReplayId, uint32(match.actorAppearanceSnapshots.size()), inlineAppearanceColumn ? 1 : 0);
             PersistReplayActorAppearanceSnapshots(insertedReplayId, match);
+            PersistReplayQualityMetadata(insertedReplayId, replayQuality);
         }
 
         for (Player* notifyPlayer : notifyPlayers)
             if (notifyPlayer)
-                ChatHandler(notifyPlayer->GetSession()).PSendSysMessage("Replay saved. Match ID: {}", insertedReplayId);
+            {
+                if (ReplayQualityEnabled() && !replayQuality.visibleInBrowser)
+                    ChatHandler(notifyPlayer->GetSession()).PSendSysMessage("Replay recorded as diagnostic only. Match ID: {} quality={} reason={}", insertedReplayId, replayQuality.quality, replayQuality.reason);
+                else
+                    ChatHandler(notifyPlayer->GetSession()).PSendSysMessage("Replay saved. Match ID: {}", insertedReplayId);
+            }
 
         records.erase(it);
     }
@@ -7257,12 +7564,13 @@ public:
 
                 std::string playerGuidStr = std::to_string(playerData->Guid.GetRawValue());
 
+                std::string qualityWhere = ReplayQualityBrowserWhereClause("");
                 QueryResult result = CharacterDatabase.Query(
                     "SELECT id, winnerTeamName, winnerTeamRating, winnerPlayerGuids, loserTeamName, loserTeamRating, loserPlayerGuids "
                     "FROM character_arena_replays "
-                    "WHERE FIND_IN_SET('{}', REPLACE(winnerPlayerGuids, ' ', '')) OR FIND_IN_SET('{}', REPLACE(loserPlayerGuids, ' ', '')) "
+                    "WHERE (FIND_IN_SET('{}', REPLACE(winnerPlayerGuids, ' ', '')) OR FIND_IN_SET('{}', REPLACE(loserPlayerGuids, ' ', ''))) {} "
                     "ORDER BY id DESC LIMIT {}",
-                    playerGuidStr, playerGuidStr, GetReplayBrowseLimit());
+                    playerGuidStr, playerGuidStr, qualityWhere, GetReplayBrowseLimit());
                 if (!result)
                 {
                     ChatHandler(player->GetSession()).PSendSysMessage("No replays found for player: {}", std::string(code));
@@ -7461,12 +7769,13 @@ private:
         std::string recentCutoff = ss.str();
         std::string playerGuidStr = std::to_string(uint64(characterId));
 
+        std::string qualityWhere = ReplayQualityBrowserWhereClause("");
         QueryResult result = CharacterDatabase.Query(
             "SELECT id, winnerTeamName, winnerTeamRating, winnerPlayerGuids, loserTeamName, loserTeamRating, loserPlayerGuids "
             "FROM character_arena_replays "
-            "WHERE timestamp >= '{}' AND (FIND_IN_SET('{}', REPLACE(winnerPlayerGuids, ' ', '')) OR FIND_IN_SET('{}', REPLACE(loserPlayerGuids, ' ', ''))) "
+            "WHERE timestamp >= '{}' AND (FIND_IN_SET('{}', REPLACE(winnerPlayerGuids, ' ', '')) OR FIND_IN_SET('{}', REPLACE(loserPlayerGuids, ' ', ''))) {} "
             "ORDER BY id DESC LIMIT {}",
-            recentCutoff, playerGuidStr, playerGuidStr, GetReplayBrowseLimit());
+            recentCutoff, playerGuidStr, playerGuidStr, qualityWhere, GetReplayBrowseLimit());
 
         if (!result)
             return records;
@@ -7495,13 +7804,14 @@ private:
         if (!IsRecentlyWatchedEnabled())
             return records;
 
+        std::string qualityWhere = ReplayQualityBrowserWhereClause("r");
         QueryResult result = CharacterDatabase.Query(
             "SELECT r.id, r.winnerTeamName, r.winnerTeamRating, r.winnerPlayerGuids, r.loserTeamName, r.loserTeamRating, r.loserPlayerGuids "
             "FROM character_recently_watched_replays rw "
             "JOIN character_arena_replays r ON r.id = rw.replay_id "
-            "WHERE rw.character_id = {} "
+            "WHERE rw.character_id = {} {} "
             "ORDER BY rw.last_watched DESC LIMIT {}",
-            characterId, GetReplayBrowseLimit());
+            characterId, qualityWhere, GetReplayBrowseLimit());
 
         if (!result)
             return records;
@@ -7527,7 +7837,8 @@ private:
     std::vector<ReplayInfo> loadReplaysAllTimeByArenaType(uint8 arenaTypeId)
     {
         std::vector<ReplayInfo> records;
-        QueryResult result = CharacterDatabase.Query("SELECT id, winnerTeamName, winnerTeamRating, winnerPlayerGuids, loserTeamName, loserTeamRating, loserPlayerGuids FROM character_arena_replays WHERE arenaTypeId = {} ORDER BY winnerTeamRating DESC LIMIT {}", arenaTypeId, GetReplayBrowseLimit());
+        std::string qualityWhere = ReplayQualityBrowserWhereClause("");
+        QueryResult result = CharacterDatabase.Query("SELECT id, winnerTeamName, winnerTeamRating, winnerPlayerGuids, loserTeamName, loserTeamRating, loserPlayerGuids FROM character_arena_replays WHERE arenaTypeId = {} {} ORDER BY winnerTeamRating DESC LIMIT {}", arenaTypeId, qualityWhere, GetReplayBrowseLimit());
 
         if (!result)
             return records;
@@ -7564,11 +7875,12 @@ private:
         std::string thirtyDaysAgo = ss.str();
 
 		// Only show games that are 30 days old
+        std::string qualityWhere = ReplayQualityBrowserWhereClause("");
         QueryResult result = CharacterDatabase.Query(
             "SELECT id, winnerTeamName, winnerTeamRating, winnerPlayerGuids, loserTeamName, loserTeamRating, loserPlayerGuids, timestamp "
             "FROM character_arena_replays "
-            "WHERE arenaTypeId = {} AND timestamp >= '{}' "
-            "ORDER BY id DESC LIMIT {}", arenaTypeId, thirtyDaysAgo.c_str(), GetReplayBrowseLimit());
+            "WHERE arenaTypeId = {} AND timestamp >= '{}' {} "
+            "ORDER BY id DESC LIMIT {}", arenaTypeId, thirtyDaysAgo.c_str(), qualityWhere, GetReplayBrowseLimit());
 
         if (!result)
             return records;
@@ -7612,11 +7924,13 @@ private:
     std::vector<ReplayInfo> loadMostWatchedReplays()
     {
         std::vector<ReplayInfo> records;
+        std::string qualityWhere = ReplayQualityBrowserWhereClause("");
         QueryResult result = CharacterDatabase.Query(
             "SELECT id, winnerTeamName, winnerTeamRating, winnerPlayerGuids, loserTeamName, loserTeamRating, loserPlayerGuids "
             "FROM character_arena_replays "
+            "WHERE 1=1 {} "
             "ORDER BY timesWatched DESC, winnerTeamRating DESC "
-            "LIMIT {}", GetReplayBrowseLimit());
+            "LIMIT {}", qualityWhere, GetReplayBrowseLimit());
 
         if (!result)
             return records;
@@ -7638,12 +7952,13 @@ private:
         AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Favorite a Match ID", REPLAY_GOSSIP_SENDER_CODE, MY_FAVORITE_MATCHES, "", 0, true);
 
         std::string sortOrder = (firstPage) ? "ASC" : "DESC";
+        std::string qualityWhere = ReplayQualityBrowserWhereClause("r");
         QueryResult result = CharacterDatabase.Query(
             "SELECT r.id, r.winnerTeamName, r.winnerTeamRating, r.winnerPlayerGuids, r.loserTeamName, r.loserTeamRating, r.loserPlayerGuids "
             "FROM character_saved_replays s "
             "JOIN character_arena_replays r ON r.id = s.replay_id "
-            "WHERE s.character_id = {} ORDER BY s.id {} LIMIT {}",
-            player->GetGUID().GetCounter(), sortOrder, GetReplayBrowseLimit());
+            "WHERE s.character_id = {} {} ORDER BY s.id {} LIMIT {}",
+            player->GetGUID().GetCounter(), qualityWhere, sortOrder, GetReplayBrowseLimit());
         if (!result)
             AddGossipItemFor(player, GOSSIP_ICON_TAXI, "No saved replays found.", REPLAY_GOSSIP_SENDER_SELECT, GOSSIP_ACTION_INFO_DEF);
         else
@@ -7680,7 +7995,8 @@ private:
     void FavoriteMatchId(uint64 playerGuid, uint32 code)
     {
         // Need to check if the match exists in character_arena_replays, then insert in character_saved_replays
-        QueryResult result = CharacterDatabase.Query("SELECT id FROM character_arena_replays WHERE id = " + std::to_string(code));
+        std::string qualityWhere = ReplayQualityBrowserWhereClause("");
+        QueryResult result = CharacterDatabase.Query("SELECT id FROM character_arena_replays WHERE id = {} {}", code, qualityWhere);
         if (result)
         {
             std::string query = "INSERT IGNORE INTO character_saved_replays (character_id, replay_id) VALUES (" + std::to_string(playerGuid) + ", " + std::to_string(code) + ")";
@@ -7930,9 +8246,26 @@ private:
             return false;
         }
 
+        ReplayQualitySummary replayQuality = LoadReplayQualityMetadata(matchId);
+        if (!ReplayQualityAllowsPlayback(matchId, replayQuality, p))
+        {
+            CloseGossipMenuFor(p);
+            return false;
+        }
+
         CharacterDatabase.Execute("UPDATE character_arena_replays SET timesWatched = timesWatched + 1 WHERE id = {}", matchId);
 
         MatchRecord record;
+        record.replayQuality = replayQuality.quality;
+        record.replayQualityReason = replayQuality.reason;
+        record.packetQualified = replayQuality.packetQualified;
+        record.visibleInBrowser = replayQuality.visibleInBrowser;
+        record.team0PacketReceiverCount = replayQuality.team0RealPlayers;
+        record.team1PacketReceiverCount = replayQuality.team1RealPlayers;
+        record.winnerPacketCount = replayQuality.winnerPackets;
+        record.loserPacketCount = replayQuality.loserPackets;
+        record.winnerRealPlayerCount = replayQuality.winnerRealPlayers;
+        record.loserRealPlayerCount = replayQuality.loserRealPlayers;
         deserializeMatchData(record, fields);
         LoadReplayActorAppearanceSnapshots(record, matchId);
         if (inlineAppearanceColumn)
